@@ -1,3 +1,4 @@
+import dash
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 from app.components.items import navbar, footer
