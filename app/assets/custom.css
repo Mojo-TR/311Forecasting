@@ -1,0 +1,36 @@
+
+/* Dropdown menu background */
+.Select-menu-outer,
+.Select-menu {
+    background-color: #16092d !important;
+    color: white !important;
+}
+
+/* Selected items / badges */
+.Select-value-label {
+    color: white !important;
+    background-color: #6944ba !important; /* badge background color */
+}
+
+/* Placeholder text */
+.Select-placeholder {
+    color: rgba(255,255,255,0.6) !important;
+}
+
+/* Hover items in dropdown */
+.Select-option:hover {
+    background-color: #140327 !important;
+    color: white !important;
+}
+
+/* === Style the “x” icon inside badges (remove item) === */
+.Select-value-icon {
+    color: #6944ba !important;        /* make it same as background */
+    border: none !important;
+}
+
+.no-glow {
+    text-shadow: none !important;
+}
+
+
