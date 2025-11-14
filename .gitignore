@@ -222,4 +222,3 @@ Pre2021/
 .venv/
 .idea/
 .DS_Store
-!app/data/Houston-311-Clean.csv
