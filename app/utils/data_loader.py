@@ -2,8 +2,10 @@ import os
 import pandas as pd
 from sqlalchemy import create_engine
 
+db_url = os.getenv("DATABASE_URL")
+
 # Connect to your Postgres database
-engine = create_engine("postgresql://mojo@localhost:5432/houston311db")
+engine = create_engine(db_url)
 
 # Load the table into a DataFrame
 df = pd.read_sql("SELECT * FROM houston_311", engine)
