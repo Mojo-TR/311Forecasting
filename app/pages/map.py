@@ -2,7 +2,7 @@ from dash import html, dcc, register_page, Output, Input, callback
 import dash_bootstrap_components as dbc
 import plotly.express as px
 import pandas as pd
-from app.data_loader import df
+from app.utils.data_loader import df
 
 register_page(__name__, path="/map", title="Map")
 

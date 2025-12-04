@@ -74,6 +74,8 @@ category_mapping = {
     "Missed Heavy Trash Pickup": "Heavy Trash & Code Violations",
     "Heavy Trash Violation": "Heavy Trash & Code Violations",
     "Heavy Trash Code Violation": "Heavy Trash & Code Violations",
+    "Junk Motor Vehicle - Private Property": "Heavy Trash & Code Violations",
+    "Weeds/Trash/Stagnant Water on Property": "Heavy Trash & Code Violations",
 
     # Road & Street Maintenance
     "Pothole": "Road & Street Maintenance",
@@ -85,6 +87,7 @@ category_mapping = {
     "Icing Roadway": "Road & Street Maintenance",
     "Restoration Due To Utility Work": "Road & Street Maintenance",
     "Parking Lot Pothole": "Road & Street Maintenance",
+    "Street Assessment": "Road & Street Maintenance",
     'SPARK Park': "Parks & Recreation",
     'Clean Pavilion or Restroom': "Parks & Recreation",
     'Dugout Repair': "Parks & Recreation",
@@ -153,6 +156,9 @@ category_mapping = {
     'Identify Numbered Address': "Building & Code Enforcement",
     'Building Break In' : "Building & Code Enforcement",
     'Ashby Highrise Concern' : "Building & Code Enforcement",
+    'Dangerous Buildings' : "Building & Code Enforcement",
+    'HPW CCE Escalation' : "Building & Code Enforcement",
+    'Minimum Standards - Residence' : "Building & Code Enforcement",
 
     # Illegal Dumping & Nuisance
     "Trash Dumping or Illegal Dumpsite": "Illegal Dumping & Nuisance",
@@ -243,6 +249,9 @@ category_mapping = {
     'MOPD Meetings': "Administrative & Mayor’s Office",
     'Vital Statistics Escalation': "Administrative & Mayor’s Office",
     'MYR HPD Illegal Dumping' : "Administrative & Mayor’s Office",
+    'MYR 311' : "Administrative & Mayor’s Office",
+    'MYR CAO' : "Administrative & Mayor’s Office",
+    'MYR HPW CCE' : "Administrative & Mayor’s Office",
 
     # Complaints / Liaison
     "Employee Complaint": "Complaints / Liaison",
@@ -261,6 +270,7 @@ category_mapping = {
     "Speed Cushion Repair": "Transportation & Safety",
     "Bike Lane Maintenance": "Transportation & Safety",
     'Vehicle for Hire Complaint': "Transportation & Safety",
+    'Bandit Sign - Right of Way': "Transportation & Safety",
 
     # Public Infrastructure / Engineering
     "Post Replace or Install": "Public Infrastructure / Engineering",

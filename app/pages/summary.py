@@ -2,9 +2,9 @@ from dash import html, dcc, register_page, Input, Output, callback
 import dash_bootstrap_components as dbc
 import plotly.express as px
 import pandas as pd
-from app.data_loader import df
+from app.utils.data_loader import df
 from app.data.category_mapping import category_to_types
-from app.components.utils import make_table
+from app.utils.utils import make_table
 
 
 register_page(__name__, path="/summary", title="Summary")
@@ -64,25 +64,49 @@ layout = dbc.Container([
     ], justify="center", className="mb-4"),
 
     # Treemap
-    dbc.Row([
-        dbc.Col(
-            dbc.Card(
-                [
-                    dbc.CardBody(dcc.Graph(id="metric-treemap"))
-                ],
-                className="bg-dark border-dark text-white rounded-3 mb-4",
-            ),
-            md=12,
+    dbc.Card(
+        dbc.CardBody(
+            dbc.Spinner(
+                html.Div(
+                    dcc.Graph(id="metric-treemap"),
+                    style={
+                        "display": "flex",
+                        "justifyContent": "center",
+                        "alignItems": "center",
+                    }
+                ),
+                type="grow",
+                color="primary",
+                size="lg"
+            )
         ),
-    ]),
+        className="bg-dark border-dark text-white rounded-3 mb-5"
+    ),
 
     # Resolution Table
-    dbc.Card([
-        dbc.CardBody([
-            html.H5(id="table-title", className="text-white mb-3"),
-            html.Div(id="resolution-table-container")
-        ])
-    ], className="bg-dark border-dark mb-5"),
+    dbc.Card(
+        dbc.CardBody(
+            dbc.Spinner(
+                html.Div(
+                    [
+                        html.H5(id="table-title", className="text-white mb-3"),
+                        html.Div(id="resolution-table-container")
+                    ],
+                    style={
+                        "display": "flex",
+                        "justifyContent": "center",
+                        "alignItems": "center",
+                        "height": "100%",
+                        "flexDirection": "column"  # stack H5 and table vertically
+                    }
+                ),
+                type="grow",
+                color="primary",
+                size="lg"
+            )
+        ),
+        className="bg-dark border-dark my-5"
+    ),
 
     # Div that wraps the dropdown + case types list
     html.Div(

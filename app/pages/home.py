@@ -2,18 +2,18 @@ from dash import html, dcc, register_page
 import dash_bootstrap_components as dbc
 from dash import Input, Output, callback
 import pandas as pd
-from app.data_loader import df
+from app.utils.data_loader import df
 import plotly.express as px
 from datetime import datetime
-from app.components.utils import make_table
-from app.forecast_loader import start_forecast_thread, get_home_forecast_summary, forecast_ready
+from app.utils.utils import make_table
+from app.utils.forecast_loader import get_home_forecast_summary
 
 register_page(__name__, path="/")
 
 # Start background forecast thread
-start_forecast_thread()
+summary_text = get_home_forecast_summary()
 
-# Get current month as string, e.g. "November 2025"
+# Get current month as string
 current_month = datetime.now().strftime("%B %Y")
 
 # total months

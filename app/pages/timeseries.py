@@ -3,12 +3,11 @@ import pandas as pd
 import plotly.express as px
 import dash_bootstrap_components as dbc
 import calendar
-from app.data_loader import df
+from app.utils.data_loader import df
 
 register_page(__name__, path="/complaints", title="Complaints Over Time")
 
 # Ensure date fields exist
-df["CREATED DATE"] = pd.to_datetime(df["CREATED DATE"], errors="coerce")
 df["Year"] = df["CREATED DATE"].dt.year
 df["Month"] = df["CREATED DATE"].dt.month_name()
 df["Month & Year"] = df["CREATED DATE"].dt.to_period("M")
@@ -60,15 +59,18 @@ layout = dbc.Container([
 
     html.Div(
         dbc.Card(
-            [
-                dbc.CardBody([
+            dbc.CardBody([
+                dbc.Spinner(
                     dcc.Graph(
                         id="timeseries-graph",
                         config={"displayModeBar": False},
                         style={"height": "700px"}
-                    )
-                ])
-            ],
+                    ),
+                    type="grow", 
+                    color="primary",
+                    size="lg",
+                )
+            ]),
             className="bg-dark border-dark mb-3",
             style={
                 "overflowX": "auto",

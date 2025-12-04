@@ -1,7 +1,7 @@
 from dash import html, dcc, register_page, callback, Output, Input
 import pandas as pd
 import plotly.express as px
-from app.data_loader import df
+from app.utils.data_loader import df
 import dash_bootstrap_components as dbc
 from app.data.category_mapping import category_to_types
 
@@ -50,7 +50,12 @@ layout = dbc.Container([
         dbc.Col(
             dbc.Card(
                 dbc.CardBody(
-                    dcc.Graph(id="stackedbar-graph", style={"minWidth": "1200px"})  # make the chart wide enough
+                    dbc.Spinner(
+                        dcc.Graph(id="stackedbar-graph", style={"minWidth": "1200px"}),
+                        type="grow",
+                        color="primary",
+                        size="lg"
+                    )
                 ),
                 color="dark",
                 outline=True,
@@ -68,7 +73,12 @@ layout = dbc.Container([
         dbc.Col(
             dbc.Card(
                 dbc.CardBody(
-                    html.Div(id="stackedbar-legend")
+                    dbc.Spinner(
+                        html.Div(id="stackedbar-legend"),
+                        type="grow",
+                        color="primary",
+                        size="lg"
+                    )
                 ),
                 color="dark",
                 outline=True,
@@ -84,12 +94,18 @@ layout = dbc.Container([
         )
     ], style={"flexWrap": "nowrap"}, className="mb-4"),
 
-    html.H6("Average Resolution Times by Neighborhood ", className="text-white text-center mt-4 mb-2"),
-
+    # Resolution bar
     dbc.Row([
         dbc.Col(
             dbc.Card(
-                dbc.CardBody(dcc.Graph(id="resolution-bar", figure=None)),
+                dbc.CardBody(
+                    dbc.Spinner(
+                        dcc.Graph(id="resolution-bar", figure=None),
+                        type="grow",
+                        color="primary",
+                        size="lg"
+                    )
+                ),
                 color="dark",
                 className="border-dark bg-dark",
                 outline=True,
@@ -121,6 +137,11 @@ layout = dbc.Container([
 )
 def update_bar(selected_metric, selected_month):
     dff = df.copy()
+    
+    # Drop null or empty neighborhoods
+    dff = dff.dropna(subset=["NEIGHBORHOOD"])
+    dff = dff[dff["NEIGHBORHOOD"] != "None"]
+    dff = dff[dff["NEIGHBORHOOD"].str.strip() != ""]
 
     if selected_month != "all" and selected_month is not None:
         dff = dff[dff["MonthName"] == selected_month]

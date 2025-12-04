@@ -3,252 +3,11 @@ import dash_bootstrap_components as dbc
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-from prophet import Prophet
-from app.data_loader import df
-from app.components.utils import make_table
+from app.utils.data_loader import df
+from app.utils.utils import make_table
+from app.utils.forecast_engine import *
 
 register_page(__name__, path="/forecasts", title="Forecasts")
-
-# Constants
-FORECAST_CONFIG = {
-    "volume": {
-        "min_months": 12,
-        "max_mape": 50,
-        "horizon_months": 12,
-        "trend_window": 3
-    },
-
-    "severity": {
-        "min_months": 6,
-        "max_mape": 70,
-        "horizon_months": 6,
-        "trend_window": 2
-    }
-}
-
-
-# Fill missing CLOSED DATEs with estimated closure based on median duration
-if df["CLOSED DATE"].isna().any():
-    median_duration = (df["CLOSED DATE"] - df["CREATED DATE"]).dropna().dt.days.median()
-    df["CLOSED DATE"] = df["CLOSED DATE"].fillna(df["CREATED DATE"] + pd.to_timedelta(median_duration, unit="D"))
-
-df["SEVERITY_SCORE"] = (df["CLOSED DATE"] - df["CREATED DATE"]).dt.days
-
-# Helper Functions
-def new_prophet():
-    return Prophet(interval_width=0.95, yearly_seasonality=True, mcmc_samples=0)
-
-
-def rolling_trend(series, window=3):
-    return series.rolling(window=window, min_periods=1, center=True).mean()
-
-
-# Forecast Functions
-def compute_forecast(ts, config):
-    min_months = config.get("min_months", 12)
-    max_mape = config.get("max_mape", 50)
-    trend_window = config.get("trend_window", 3)
-    ts = ts.sort_values("ds")
-
-    # Not enough data → unreliable
-    if len(ts) < min_months or ts["y"].nunique() < 2:
-        print("Skipping forecast — insufficient data:", ts.head())
-        ts["yhat"] = ts["y"]
-        ts["Rolling_Trend"] = ts["yhat"]
-        ts["Rolling_%_Change"] = ts["yhat"].pct_change().fillna(0) * 100
-        # Add placeholder intervals to prevent KeyError
-        ts["yhat_lower"] = ts["yhat"]
-        ts["yhat_upper"] = ts["yhat"]
-        return ts, ts, False  # unreliable
-
-    model = new_prophet()
-    model.fit(ts)
-
-    if ts["y"].dropna().shape[0] < 2:
-        ts["yhat"] = ts["y"].fillna(0)
-        ts["yhat_lower"] = ts["yhat_upper"] = ts["yhat"]
-        ts["Rolling_Trend"] = rolling_trend(ts["yhat"])
-        ts["Rolling_%_Change"] = 0
-        return ts, ts, False
-
-    forecast_horizon = config.get("horizon_months", 12)
-    future = model.make_future_dataframe(periods=forecast_horizon, freq="ME")
-    forecast = model.predict(future)[["ds", "yhat", "yhat_lower", "yhat_upper"]]
-    forecast["Rolling_Trend"] = rolling_trend(forecast["yhat"], window=trend_window)
-
-    # Compute MAPE on historical points
-    mape = None
-    reliable = False
-
-    merged = pd.merge_asof(
-        ts.sort_values("ds"),
-        forecast.sort_values("ds"),
-        on="ds",
-        tolerance=pd.Timedelta("1D")
-    )
-
-    if not merged.empty:
-        valid = merged.copy()
-        valid["y"] = valid["y"].replace(0, np.nan)
-        valid = valid.dropna(subset=["y"])
-        if not valid.empty:
-            mape = (abs(valid["y"] - valid["yhat"]) / valid["y"]).mean() * 100
-        else:
-            mape = 999
-        reliable = mape <= max_mape
-    else:
-        reliable = False
-
-    forecast["Rolling_Trend"] = rolling_trend(forecast["yhat"], window=trend_window)
-    if "Rolling_%_Change" not in ts.columns:
-        ts["Rolling_%_Change"] = ts["y"].pct_change().fillna(0) * 100
-
-    # Guarantee Rolling_%_Change column in both datasets
-    for df in [ts, forecast]:
-        if "Rolling_%_Change" not in df.columns:
-            if "y" in df.columns:
-                df["Rolling_%_Change"] = df["y"].pct_change().fillna(0) * 100
-            elif "yhat" in df.columns:
-                df["Rolling_%_Change"] = df["yhat"].pct_change().fillna(0) * 100
-            else:
-                df["Rolling_%_Change"] = 0
-
-    return ts, forecast, reliable, mape
-
-def get_forecast(neigh, item, level, config):
-    level_col = {"category": "CATEGORY", "department": "DEPARTMENT", "division": "DIVISION"}.get(level.lower(), "CATEGORY")
-    ts = df.copy() if neigh == "CITYWIDE" else df[df["NEIGHBORHOOD"] == neigh]
-
-    if item != "ALL":
-        ts = ts[ts[level_col].astype(str).str.strip() == str(item).strip()]
-        print(f"Filtered rows for {neigh}/{item}: {len(ts)}")
-
-    # Aggregate monthly counts
-    ts_grouped = (
-        ts.groupby(pd.Grouper(key="CREATED DATE", freq="ME"))
-        .size()
-        .reset_index(name="y")
-        .rename(columns={"CREATED DATE": "ds"})
-    )
-
-    # Fill missing months
-    full_range = pd.date_range(ts_grouped["ds"].min(), ts_grouped["ds"].max(), freq="ME")
-    ts_grouped = ts_grouped.set_index("ds").reindex(full_range)
-    ts_grouped["y"] = ts_grouped["y"].interpolate().bfill().ffill()
-    ts_grouped = ts_grouped.rename_axis("ds").reset_index()
-
-    if ts_grouped["y"].dropna().shape[0] < 2:
-        # Not enough data to forecast
-        message = f"{neigh}/{item}: Not enough data to generate forecast"
-        return None, None, message, None
-
-    # Split train/test for MAPE calculation
-    test_period = min(6, len(ts_grouped) // 4)  # use last 6 months or 25% of data if smaller
-    train = ts_grouped.iloc[:-test_period] if len(ts_grouped) > test_period else ts_grouped
-    test = ts_grouped.iloc[-test_period:] if len(ts_grouped) > test_period else pd.DataFrame(columns=ts_grouped.columns)
-
-    # Fit Prophet on all historical data
-    model = new_prophet()
-    model.fit(ts_grouped)
-
-    # Future forecast using horizon from config
-    future_horizon = config.get("horizon_months", 12)
-    future = model.make_future_dataframe(periods=future_horizon, freq="ME")
-    forecast = model.predict(future)[["ds", "yhat", "yhat_lower", "yhat_upper"]]
-
-    # Compute MAPE on test period
-    if not test.empty:
-        pred = pd.merge(forecast[["ds", "yhat"]], test, on="ds", how="inner")
-        pred["y"] = pred["y"].replace(0, np.nan)
-        pred = pred.dropna(subset=["y"])
-        mape = (abs(pred["y"] - pred["yhat"]) / pred["y"]).mean() * 100 if not pred.empty else None
-    else:
-        mape = None
-
-    if mape is None:
-        reliability = "Unreliable"
-    elif mape <= config["max_mape"] * 0.6:
-        reliability = "Reliable"
-    elif mape <= config["max_mape"]:
-        reliability = "Possibly Unreliable"
-    else:
-        reliability = "Unreliable"
-
-    # Rolling trend and % change
-    forecast["Rolling_Trend"] = rolling_trend(forecast["yhat"], window=config.get("trend_window", 3))
-    ts_grouped["Rolling_%_Change"] = ts_grouped["y"].pct_change().fillna(0) * 100
-    forecast["Rolling_%_Change"] = forecast["yhat"].pct_change().fillna(0) * 100
-
-    return ts_grouped, forecast, reliability, mape
-
-def get_severity_forecast(neigh, item, level, config):
-    level_col = {"category": "CATEGORY", "department": "DEPARTMENT", "division": "DIVISION"}.get(level.lower(), "CATEGORY")
-    ts = df.copy() if neigh == "CITYWIDE" else df[df["NEIGHBORHOOD"] == neigh]
-
-    if item != "ALL":
-        ts = ts[ts[level_col].astype(str).str.strip() == str(item).strip()]
-        print(f"Filtered rows for {neigh}/{item}: {len(ts)}")
-
-    ts = ts.dropna(subset=["SEVERITY_SCORE"])
-
-    # Monthly average severity
-    ts_grouped = (
-        ts.groupby(pd.Grouper(key="CREATED DATE", freq="ME"))["SEVERITY_SCORE"]
-        .mean()
-        .reset_index()
-        .rename(columns={"CREATED DATE": "ds", "SEVERITY_SCORE": "y"})
-    )
-
-    # Fill missing months via interpolation
-    full_range = pd.date_range(ts_grouped["ds"].min(), ts_grouped["ds"].max(), freq="ME")
-    ts_grouped = ts_grouped.set_index("ds").reindex(full_range)
-    ts_grouped["y"] = ts_grouped["y"].interpolate().bfill().ffill()
-    ts_grouped = ts_grouped.rename_axis("ds").reset_index()
-
-    if ts_grouped["y"].dropna().shape[0] < 2:
-        # Not enough data to forecast
-        message = f"{neigh}/{item}: Not enough data to generate forecast"
-        return None, None, message, None
-
-    # Split train/test for MAPE calculation (last 6 months or fewer if not enough data)
-    test_period = 6
-    train = ts_grouped.iloc[:-test_period] if len(ts_grouped) > test_period else ts_grouped
-    test = ts_grouped.iloc[-test_period:] if len(ts_grouped) > test_period else pd.DataFrame(columns=ts_grouped.columns)
-
-    # Fit Prophet on the full historical data
-    model = new_prophet()
-    model.fit(ts_grouped)
-
-    # Make future forecast using the configured horizon
-    future_horizon = config.get("horizon_months", 6)
-    future = model.make_future_dataframe(periods=future_horizon, freq="ME")
-    forecast = model.predict(future)[["ds", "yhat", "yhat_lower", "yhat_upper"]]
-
-    # Compute MAPE only on the test period
-    if not test.empty:
-        pred = pd.merge(forecast[["ds", "yhat"]], test, on="ds", how="inner")
-        pred["y"] = pred["y"].replace(0, np.nan)
-        pred = pred.dropna(subset=["y"])
-        mape = (abs(pred["y"] - pred["yhat"]) / pred["y"]).mean() * 100 if not pred.empty else None
-    else:
-        mape = None
-
-    if mape is None:
-        reliability = "Unreliable"
-    elif mape <= config["max_mape"] * 0.6:
-        reliability = "Reliable"
-    elif mape <= config["max_mape"]:
-        reliability = "Possibly Unreliable"
-    else:
-        reliability = "Unreliable"
-
-    # Rolling trend and percent change
-    forecast["Rolling_Trend"] = rolling_trend(forecast["yhat"], window=config.get("trend_window", 2))
-    ts_grouped["Rolling_%_Change"] = ts_grouped["y"].pct_change().fillna(0) * 100
-    forecast["Rolling_%_Change"] = forecast["yhat"].pct_change().fillna(0) * 100
-
-    return ts_grouped, forecast, reliability, mape
-
 
 # Layout
 layout = dbc.Container([
@@ -313,7 +72,7 @@ layout = dbc.Container([
                     labelClassName="btn btn-outline-info",
                     labelCheckedClassName="btn btn-info"
                 ),
-                width="auto",  # <— lets it shrink to fit the buttons
+                width="auto",
                 className="text-center"
             )
         ],
@@ -326,12 +85,19 @@ layout = dbc.Container([
         className="text-center text-white mb-2"
     ),
 
+    # Graph
     dbc.Card(
         dbc.CardBody(
-            dcc.Graph(
-                id="forecast-graph",
-                figure={},
-                style={"height": "500px"}
+            dbc.Spinner(
+                dcc.Graph(
+                    id="forecast-graph",
+                    figure={},
+                    style={"height": "500px"}
+                ),
+                size="lg",
+                color="primary",
+                type="grow", 
+                fullscreen=False 
             )
         ),
         className="bg-dark border-dark mb-4"
@@ -339,12 +105,16 @@ layout = dbc.Container([
 
     html.H5("Monthly Complaint Predictions & Bias", className="text-center text-white mb-4"),
 
+    # Table
     dbc.Row(
         dbc.Col(
-            html.Div(
-                id="forecast-table-container"
+            dbc.Spinner(
+                html.Div(id="forecast-table-container"),
+                size="lg",
+                color="primary",
+                type="grow"
             ),
-            width= 10
+            width=10
         ),
         justify="center",
         className="mb-4"
