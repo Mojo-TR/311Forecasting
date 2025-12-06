@@ -40,4 +40,4 @@ def get_home_forecast_summary():
         return "No forecast available for current month."
 
     value = current_row["yhat"].values[0]
-    return f"Expected total complaints for {now.strftime('%B %Y')}: {value:.0f}"
+    return f"{value:,.0f}"

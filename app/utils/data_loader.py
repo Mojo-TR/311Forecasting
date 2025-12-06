@@ -1,7 +1,9 @@
+from dotenv import load_dotenv
 import os
 import pandas as pd
 from sqlalchemy import create_engine
 
+load_dotenv()
 db_url = os.getenv("DATABASE_URL")
 
 # Connect to your Postgres database
@@ -25,5 +27,9 @@ for c in cols:
 df[["CREATED DATE", "CLOSED DATE"]] = df[["CREATED DATE", "CLOSED DATE"]].apply(
     pd.to_datetime, errors="coerce"
 )
+
+df["Year"] = df["CREATED DATE"].dt.year
+
+df["Year"] = pd.to_numeric(df["Year"], errors="coerce").astype("Int64")
 
 df = df.infer_objects(copy=False)

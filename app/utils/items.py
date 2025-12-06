@@ -39,11 +39,11 @@ def footer():
                     html.A("Mojoolu Roberts", href="https://www.linkedin.com/in/mojotr/", 
                         className="text-info", target="_blank"),
                     html.Span(" | Data: "),
-                    html.A("City of Houston 311 Help & Information", 
-                        href="https://www.houstontx.gov/311/", 
+                    html.A("houstontx.gov", 
+                        href="https://www.houstontx.gov/311/servicerequestdata.html", 
                         className="text-info", target="_blank"),
-                    # html.Span(" | "), 
-                    # html.A("Source Code", href="https://github.com/mojoolu/311App", className="text-info", target="_blank")
+                    html.Span(" | "), 
+                    html.A("Source Code", href="https://github.com/Mojo-TR/311Forecasting", className="text-info", target="_blank")
                 ],
                 className="text-info text-center mt-4 mb-2",
                 style={"fontSize": "0.9rem"})

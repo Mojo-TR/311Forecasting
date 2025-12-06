@@ -16,6 +16,14 @@ summary_text = get_home_forecast_summary()
 # Get current month as string
 current_month = datetime.now().strftime("%B %Y")
 
+# Cases in the current month
+current_month_period = datetime.now().strftime("%Y-%m")
+cases_this_month = df[df["CREATED DATE"].dt.to_period("M") == current_month_period].shape[0]
+
+# Cases yesterday
+yesterday = (datetime.now() - pd.Timedelta(days=1)).date()
+cases_yesterday = df[df["CREATED DATE"].dt.date == yesterday].shape[0]
+
 # total months
 total_months = df["CREATED DATE"].dt.to_period("M").nunique()
 
@@ -79,21 +87,49 @@ layout = dbc.Container([
 
     html.H1("Houston 311 Complaints Dashboard", className="text-center text-primary mb-4 mt-3"),
 
-    dbc.Card([
-                dbc.CardBody(
-                [
-                    html.H4("This Month’s Forecast", className="card-title text-primary no-glow fw-bold"),
-                    html.Div(
+    dbc.Row([
+        # Cases Yesterday
+        dbc.Col(
+            dbc.Card([
+                dbc.CardBody([
+                    html.H4("Yesterday's Reports", className="card-title text-primary no-glow fw-bold"),
+                    html.H2(f"{cases_yesterday:,}", className="text-white fw-bold"),
+                    dbc.Button("View Complaints →", href="/complaints", color="primary", className="mt-2 w-100")
+                ])
+            ], className="bg-dark text-light border-dark mb-4"),
+            width=3
+        ),
+        
+        # Cases This Month
+        dbc.Col(
+            dbc.Card([
+                dbc.CardBody([
+                    html.H4("Cases This Month", className="card-title text-primary no-glow fw-bold"),
+                    html.H2(f"{cases_this_month:,}", className="text-white fw-bold"),
+                    dbc.Button("View Complaints →", href="/complaints", color="primary", className="mt-2 w-100")
+                ])
+            ], className="bg-dark text-light border-dark mb-4"),
+            width=3
+        ),
+
+        # Forecast Card
+        dbc.Col(
+            dbc.Card([
+                dbc.CardBody([
+                    html.H4("This Month's Forecast", className="card-title text-primary no-glow fw-bold"),
+                    html.H2(
                         id="forecast-summary",
-                        className="fs-5 text-white fw-semibold mb-3",
+                        className="text-white fw-semibold mb-3",
                     ),
                     dbc.Button("View Full Forecast →", href="/forecasts", color="primary", className="w-100"),
-                ]
-            ),
-        ],
-        className="bg-dark text-light border-dark mb-4",
-        style={"maxWidth": "100%", "width": "22rem", "margin": "auto"},
-    ),
+                ])
+            ], className="bg-dark text-light border-dark mb-4"),
+            width=3
+        ),
+    ],
+    justify="center",
+    className="mb-4"),
+
 
     html.H5("Select what you want to explore:", className="text-center text-white mb-3"),
 

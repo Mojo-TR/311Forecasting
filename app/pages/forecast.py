@@ -259,12 +259,14 @@ def update_forecasts(selected_neighs, forecast_level, selected_item, forecast_ty
             all_forecasts.append(forecast_disp)
 
     if not_enough_data:
-        # Skip graph and table, show only alert
-        table_component = None
-        fig = go.Figure()  # empty figure
+        table_component = html.Div()   # NEVER None
+        fig = go.Figure()
         alert_text = "Not enough data to generate forecast."
         show_alert = True
         alert_color = "danger"
+        subtitle = f"Forecasting {forecast_level.title()} {forecast_type.title()} Trends"
+        return fig, table_component, alert_text, show_alert, alert_color, subtitle
+
     else:
         # Table component
         if all_forecasts:
@@ -281,6 +283,9 @@ def update_forecasts(selected_neighs, forecast_level, selected_item, forecast_ty
             # Rename columns for display
             col_rename = {"Item": forecast_level.title()}
             display_table = display_table.rename(columns=col_rename)
+            
+            if display_table.empty:
+                return fig, html.Div(), "No data available", True, "warning", subtitle
 
             # Scrollable card
             table_component = dbc.Card(

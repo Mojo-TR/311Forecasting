@@ -8,7 +8,6 @@ from app.data.category_mapping import category_to_types
 register_page(__name__, path="/metrics", title="Neighborhood Metrics")
 
 # Prepare data
-df["Year"] = df["CREATED DATE"].dt.year
 df["MonthName"] = df["CREATED DATE"].dt.month_name()
 
 month_options = [{"label": "All Months", "value": "all"}] + \

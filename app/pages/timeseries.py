@@ -8,7 +8,6 @@ from app.utils.data_loader import df
 register_page(__name__, path="/complaints", title="Complaints Over Time")
 
 # Ensure date fields exist
-df["Year"] = df["CREATED DATE"].dt.year
 df["Month"] = df["CREATED DATE"].dt.month_name()
 df["Month & Year"] = df["CREATED DATE"].dt.to_period("M")
 

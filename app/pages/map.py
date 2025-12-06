@@ -7,7 +7,7 @@ from app.utils.data_loader import df
 register_page(__name__, path="/map", title="Map")
 
 # Load data
-df["Year"] = df["CREATED DATE"].dt.year
+df["Year"] = pd.to_numeric(df["Year"], errors="coerce").astype("Int64")
 df["MonthName"] = df["CREATED DATE"].dt.month_name()
 
 # Create dropdown options
