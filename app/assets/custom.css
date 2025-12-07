@@ -33,4 +33,63 @@
     text-shadow: none !important;
 }
 
+.custom-tabs .nav-link.active {
+    color: var(--bs-info) !important;
+}
 
+/* --- Glow Spinner for Dash Loading Component --- */
+
+.dash-loading,
+.dash-loading * {
+    box-sizing: border-box;
+}
+
+/* Base spinner circle */
+.dash-spinner {
+    width: 60px !important;
+    height: 60px !important;
+    border: 6px solid rgba(255, 255, 255, 0.15) !important;
+    border-top-color: #d57bff !important; /* bright plasma purple */
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite, pulseGlow 1.8s ease-in-out infinite;
+    margin: auto;
+}
+
+/* Spinner rotation */
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Neon glow pulse */
+@keyframes pulseGlow {
+    0% {
+        box-shadow: 0 0 10px rgba(197, 108, 255, 0.6),
+                    0 0 20px rgba(197, 108, 255, 0.4),
+                    0 0 30px rgba(197, 108, 255, 0.2);
+    }
+    50% {
+        box-shadow: 0 0 25px rgba(197, 108, 255, 0.9),
+                    0 0 45px rgba(197, 108, 255, 0.6),
+                    0 0 65px rgba(197, 108, 255, 0.3);
+    }
+    100% {
+        box-shadow: 0 0 10px rgba(197, 108, 255, 0.6),
+                    0 0 20px rgba(197, 108, 255, 0.4),
+                    0 0 30px rgba(197, 108, 255, 0.2);
+    }
+}
+
+/* Center loader overlay better */
+.dcc-loading.default {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Optional: darken the background behind the loader slightly */
+.dcc-loading.default > .loading-overlay {
+    background: rgba(20, 3, 39, 0.35); /* matches your dashboard background */
+    backdrop-filter: blur(2px);
+}

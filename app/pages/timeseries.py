@@ -4,6 +4,7 @@ import plotly.express as px
 import dash_bootstrap_components as dbc
 import calendar
 from app.utils.data_loader import df
+from app.utils.utils import empty_figure
 
 register_page(__name__, path="/complaints", title="Complaints Over Time")
 
@@ -94,14 +95,24 @@ layout = dbc.Container([
 )
 def update_timeseries(selected_neigh, mode):
     dff = df.copy()
+
+    # Neighborhood filter
     if selected_neigh:
         dff = dff[dff["NEIGHBORHOOD"] == selected_neigh]
 
+    # EARLY EXIT — no data
     if dff.empty:
-        return px.line(title="No data available for the selected filters.")
+        return empty_figure("No data available for this selection.")
+
+    # Required columns safety
+    required_cols = ["Month", "Month & Year", "CREATED DATE"]
+    for col in required_cols:
+        if col not in dff.columns:
+            return empty_figure(f"Missing column: {col}")
 
     month_order = list(calendar.month_name)[1:]
 
+    # MONTHLY MODE
     if mode == "time":
         counts = (
             dff.groupby("Month & Year")
@@ -109,10 +120,15 @@ def update_timeseries(selected_neigh, mode):
             .reset_index(name="Count")
             .sort_values("Month & Year")
         )
+
+        # Empty after grouping?
+        if counts.empty:
+            return empty_figure("No monthly data available.")
+
         counts["Month & Year"] = counts["Month & Year"].dt.to_timestamp()
-        counts["LineGroup"] = "All"
         x_col = "Month & Year"
 
+        # Reindex safely
         all_months = pd.date_range(counts[x_col].min(), counts[x_col].max(), freq="MS")
         counts = (
             counts.set_index(x_col)
@@ -122,17 +138,26 @@ def update_timeseries(selected_neigh, mode):
         )
         counts["LineGroup"] = "All"
 
+    # SEASONAL MODE
     else:
+        if "Year" not in dff.columns:
+            return empty_figure("Missing Year column.")
+
         counts = (
             dff.groupby(["Year", "Month"])
             .size()
             .reset_index(name="Count")
         )
+
+        if counts.empty:
+            return empty_figure("No seasonal data available.")
+
         counts["Month"] = pd.Categorical(counts["Month"], categories=month_order, ordered=True)
         counts["LineGroup"] = counts["Year"].astype(str)
         counts = counts.sort_values(["Year", "Month"])
         x_col = "Month"
 
+    # BUILD FIGURE
     fig = px.line(
         counts,
         x=x_col,
@@ -142,29 +167,27 @@ def update_timeseries(selected_neigh, mode):
         markers=True,
         render_mode="webgl",
         title=f"{'Seasonal' if mode=='seasonal' else 'Monthly'} Complaint Trends" +
-              (f" ({selected_neigh})" if selected_neigh else ""),
+              (f" — {selected_neigh}" if selected_neigh else ""),
         labels={"Count": "Report Count", x_col: x_col},
         height=700
     )
 
+    # X-axis ordering for seasonal view
     if mode == "seasonal":
         fig.update_xaxes(categoryorder="array", categoryarray=month_order)
 
-    scroll_width = 1250
-
+    # Wide scroll container layout
     fig.update_layout(
-        plot_bgcolor="#140327",
-        paper_bgcolor="#140327",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
         font_color="#FFFFFF",
         hovermode="x unified",
-        width=scroll_width,
+        width=1250,
         xaxis_tickangle=-45 if mode == "time" else 0,
         legend=dict(
             orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1
+            yanchor="bottom", y=1.02,
+            xanchor="right", x=1
         ),
         margin=dict(l=40, r=40, t=80, b=80)
     )

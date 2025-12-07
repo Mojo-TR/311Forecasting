@@ -7,7 +7,7 @@ from sqlalchemy import create_engine, text, Table, MetaData, insert
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from datetime import datetime
 from dotenv import load_dotenv
-from app.data.category_mapping import category_mapping
+from app.utils.utils import category_mapping
 
 # CONFIG
 load_dotenv()

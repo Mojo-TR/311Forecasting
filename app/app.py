@@ -1,7 +1,7 @@
 import dash
 from dash import html, dcc
 import dash_bootstrap_components as dbc
-from app.utils.items import navbar, footer
+from app.utils.utils import navbar, footer
 from app.utils.forecast_loader import start_forecast_thread
 
 import logging
@@ -15,6 +15,8 @@ app = dash.Dash(
     use_pages=True,
     external_stylesheets=[dbc.themes.VAPOR]
 )
+
+app.config.suppress_callback_exceptions = True
 
 start_forecast_thread()
 

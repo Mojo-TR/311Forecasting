@@ -28,8 +28,11 @@ df[["CREATED DATE", "CLOSED DATE"]] = df[["CREATED DATE", "CLOSED DATE"]].apply(
     pd.to_datetime, errors="coerce"
 )
 
-df["Year"] = df["CREATED DATE"].dt.year
+if "CREATED DATE" in df.columns:
+    df["Year"] = df["CREATED DATE"].dt.year.astype("Int64")
+else:
+    df["Year"] = pd.NA
 
-df["Year"] = pd.to_numeric(df["Year"], errors="coerce").astype("Int64")
+df["MonthName"] = df["CREATED DATE"].dt.month_name()
 
 df = df.infer_objects(copy=False)

@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from app.utils.data_loader import df
-from app.utils.utils import make_table
+from app.utils.utils import make_table, empty_figure
 from app.utils.forecast_engine import *
 
 register_page(__name__, path="/forecasts", title="Forecasts")
@@ -84,6 +84,22 @@ layout = dbc.Container([
         id="forecast-subtitle",
         className="text-center text-white mb-2"
     ),
+    
+    dbc.Row(
+        dbc.Col([
+            dbc.Label("Forecast Horizon (Months):", className="text-white"),
+            dcc.Slider(
+                id="forecast-horizon",
+                min=3,
+                max=18,
+                step=3,
+                value=12,   # default
+                marks={i: str(i) for i in range(3, 19, 3)}
+            )
+        ], width=6),
+        justify="center",
+        className="mb-4"
+    ),
 
     # Graph
     dbc.Card(
@@ -136,21 +152,36 @@ layout = dbc.Container([
     Input("forecast-level", "value")
 )
 def update_items_dropdown(selected_neighs, forecast_level):
-    level_col = {"category": "CATEGORY", "department": "DEPARTMENT", "division": "DIVISION"}.get(forecast_level.lower(),
-                                                                                                 "CATEGORY")
+
+    level_col = {
+        "category": "CATEGORY",
+        "department": "DEPARTMENT",
+        "division": "DIVISION"
+    }.get(forecast_level.lower(), "CATEGORY")
+
+    # Normalize neighborhoods
     if not selected_neighs:
         selected_neighs = ["CITYWIDE"]
     elif isinstance(selected_neighs, str):
         selected_neighs = [selected_neighs]
 
+    # Collect items
     items = set()
-    for neigh in selected_neighs:
-        df_sub = df if neigh == "CITYWIDE" else df[df["NEIGHBORHOOD"] == neigh]
-        items.update(df_sub[level_col].dropna().unique())
 
-    options = [{"label": "All Items", "value": "ALL"}] + [{"label": str(i), "value": str(i)} for i in sorted(items)]
-    value = "ALL"  # reset to ALL whenever level changes
-    return options, value
+    for neigh in selected_neighs:
+        df_sub = df if neigh == "CITYWIDE" else df[df["NEIGHBORHOOD"].str.strip() == neigh.strip()]
+        items.update(df_sub[level_col].dropna().astype(str).str.strip().unique())
+        
+    if not items:
+        return [{"label": "No items available", "value": "EMPTY"}], "EMPTY"
+
+    # ALWAYS return something valid
+    options = [{"label": "All Items", "value": "ALL"}] + [
+        {"label": item, "value": item} for item in sorted(items)
+    ]
+
+
+    return options, "ALL"
 
 @callback(
     Output("forecast-graph", "figure"),
@@ -162,44 +193,81 @@ def update_items_dropdown(selected_neighs, forecast_level):
     Input("neighborhood-select", "value"),
     Input("forecast-level", "value"),
     Input("item-select", "value"),
-    Input("forecast-type", "value")
+    Input("forecast-type", "value"),
+    Input("forecast-horizon", "value")
 )
-def update_forecasts(selected_neighs, forecast_level, selected_item, forecast_type):
+def update_forecasts(selected_neighs, forecast_level, selected_item, forecast_type, horizon):
+
+    # Subtitle
+    subtitle = f"Forecasting {forecast_level.title()} {forecast_type.title()} Trends"
+
+    # Normalize neighborhoods
     if not selected_neighs:
         selected_neighs = ["CITYWIDE"]
     elif isinstance(selected_neighs, str):
         selected_neighs = [selected_neighs]
 
     selected_items = [selected_item] if selected_item != "ALL" else ["ALL"]
-    all_forecasts = []
+    
+    if selected_item == "EMPTY":
+        return (
+            empty_figure("No items available for this selection"),
+            html.Div(),
+            "No items available for this selection.",
+            True,
+            "warning",
+            subtitle
+        )
+
     fig = go.Figure()
+    all_forecasts = []
     reliability_msgs = []
-    not_enough_data = False
+
     config = FORECAST_CONFIG[forecast_type]
     get_func = get_severity_forecast if forecast_type == "severity" else get_forecast
 
+    # MAIN LOOP
     for neigh in selected_neighs:
         for item in selected_items:
-            ts, forecast, reliable, mape = get_func(neigh, item, forecast_level, config)
 
-            if ts is None or forecast is None:
-                not_enough_data = True
-                reliability_msgs.append(f"{neigh}/{item}: Not enough data to generate forecast")
-                break
+            try:
+                ts, forecast, reliable, mape = get_func(
+                    neigh, item, forecast_level, config, horizon=horizon
+                )
+            except Exception as e:
+                reliability_msgs.append(f"{neigh}/{item}: Forecast engine failed")
+                continue
 
-            # Mark reliability but don't skip plotting — show users the result with a warning
-            if mape is None or np.isnan(mape):
+            # If engine returns nothing
+            if ts is None or forecast is None or forecast.empty:
+                reliability_msgs.append(f"{neigh}/{item}: No forecast available")
+                continue
+
+            # MAPE label
+            if mape is None or not isinstance(mape, (int, float)) or np.isnan(mape):
                 msg_mape = "MAPE: N/A"
             else:
                 msg_mape = f"MAPE: {mape:.2f}%"
 
             reliability_msgs.append(f"{neigh}/{item}: {reliable} ({msg_mape})")
 
-            last_actual = ts["ds"].max()
-            forecast_future = forecast[forecast["ds"] > last_actual].copy()
-            if forecast_future.empty:
-                forecast_future = forecast.tail(12).copy()
+            # Determine forecast_future depending on forecast type
+            forecast_future = forecast.copy()
 
+            # Safety: if nothing left, skip
+            if forecast_future.empty:
+                reliability_msgs.append(f"{neigh}/{item}: No future forecast rows")
+                continue
+
+            # Limit to horizon
+            if horizon and horizon > 0:
+                forecast_future = forecast_future.head(horizon)
+
+            if forecast_future.empty:
+                reliability_msgs.append(f"{neigh}/{item}: No future rows")
+                continue
+
+            # Styles
             line_styles = {
                 "Reliable": dict(width=3, dash="solid"),
                 "Possibly Unreliable": dict(width=3, dash="dash"),
@@ -207,123 +275,108 @@ def update_forecasts(selected_neighs, forecast_level, selected_item, forecast_ty
             }
             line_style = line_styles.get(reliable, dict(width=3, dash="solid"))
 
-            # Graph traces
+            # Observed
             fig.add_trace(go.Scatter(
                 x=ts["ds"],
                 y=ts["y"],
                 mode="lines+markers",
-                name=f"Observed ({neigh}/{item})")
-            )
+                name=f"Observed ({neigh}/{item})"
+            ))
+
+            # Forecast line
             fig.add_trace(go.Scatter(
-                x=forecast_future["ds"], y=forecast_future["yhat"],
+                x=forecast_future["ds"],
+                y=forecast_future["yhat"],
                 mode="lines",
                 name=f"Forecast ({neigh}/{item})",
-                line=line_style)
-            )
+                line=line_style
+            ))
+
+            # Confidence band
             fig.add_trace(go.Scatter(
                 x=pd.concat([forecast_future["ds"], forecast_future["ds"][::-1]]),
                 y=pd.concat([forecast_future["yhat_upper"], forecast_future["yhat_lower"][::-1]]),
                 fill="toself",
                 fillcolor="rgba(0,123,255,0.15)",
-                line=dict(width=0),
-                showlegend=False)
-            )
+                showlegend=False
+            ))
+
+            # Rolling Trend
             fig.add_trace(go.Scatter(
                 x=forecast_future["ds"],
                 y=forecast_future["Rolling_Trend"],
                 mode="lines",
                 name=f"Rolling Trend ({neigh}/{item})",
-                line=dict(dash="dot", width=2, color="orange"))
-            )
+                line=dict(dash="dot", width=2, color="orange")
+            ))
 
-            # Table display fields depend on forecast_type
-            forecast_disp = forecast_future.copy()
-            forecast_disp["Month"] = forecast_disp["ds"].dt.strftime("%B %Y")
-            forecast_disp["Month_dt"] = forecast_disp["ds"]
-            forecast_disp["Neighborhood"] = neigh
-            forecast_disp["Item"] = item
+            # Build table
+            disp = forecast_future.copy()
+            disp["Month"] = disp["ds"].dt.strftime("%B %Y")
+            disp["Month_dt"] = disp["ds"]
+            disp["Neighborhood"] = neigh
+            disp["Item"] = item
 
             if forecast_type == "severity":
-                forecast_disp["Predicted Severity"] = forecast_disp["yhat"].round(1)
-                forecast_disp["Rolling Trend"] = forecast_disp["Rolling_Trend"].round(1)
-                if "Rolling_%_Change" not in forecast_disp.columns:
-                    forecast_disp["Rolling_%_Change"] = 0
-                forecast_disp["Rolling % Change"] = forecast_disp["Rolling_%_Change"].round(1).astype(str) + "%"
+                disp["Predicted Severity"] = disp["yhat"].round(1)
+                disp["Rolling Trend"] = disp["Rolling_Trend"].round(1)
+                disp["Rolling % Change"] = disp["Rolling_%_Change"].round(1).astype(str) + "%"
             else:
-                forecast_disp["Predicted Complaints"] = forecast_disp["yhat"].round(0).astype(int)
-                forecast_disp["Rolling Trend"] = forecast_disp["Rolling_Trend"].round(0).astype(int)
-                if "Rolling_%_Change" not in forecast_disp.columns:
-                    forecast_disp["Rolling_%_Change"] = 0
-                forecast_disp["Rolling % Change"] = forecast_disp["Rolling_%_Change"].round(1).astype(str) + "%"
+                disp["Predicted Complaints"] = disp["yhat"].round(0).astype(int)
+                disp["Rolling Trend"] = disp["Rolling_Trend"].round(0).astype(int)
+                disp["Rolling % Change"] = disp["Rolling_%_Change"].round(1).astype(str) + "%"
 
-            all_forecasts.append(forecast_disp)
+            all_forecasts.append(disp)
 
-    if not_enough_data:
-        table_component = html.Div()   # NEVER None
-        fig = go.Figure()
-        alert_text = "Not enough data to generate forecast."
-        show_alert = True
-        alert_color = "danger"
-        subtitle = f"Forecasting {forecast_level.title()} {forecast_type.title()} Trends"
-        return fig, table_component, alert_text, show_alert, alert_color, subtitle
-
-    else:
-        # Table component
-        if all_forecasts:
-            display_table = pd.concat(all_forecasts, ignore_index=True)
-            display_table = display_table.sort_values(by=["Month_dt", "Neighborhood"])
-
-            # Select columns
-            if forecast_type == "severity":
-                columns = ["Month", "Neighborhood", "Item", "Predicted Severity", "Rolling Trend", "Rolling % Change"]
-            else:
-                columns = ["Month", "Neighborhood", "Item", "Predicted Complaints", "Rolling Trend", "Rolling % Change"]
-            display_table = display_table[columns]
-
-            # Rename columns for display
-            col_rename = {"Item": forecast_level.title()}
-            display_table = display_table.rename(columns=col_rename)
-            
-            if display_table.empty:
-                return fig, html.Div(), "No data available", True, "warning", subtitle
-
-            # Scrollable card
-            table_component = dbc.Card(
-                dbc.CardBody(
-                    html.Div(
-                        make_table(display_table),
-                        style={
-                            "maxHeight": "410px",
-                            "overflowY": "auto",
-                            "overflowX": "auto",
-                        }
-                    )
-                ),
-                className="bg-dark border-dark mb-4"
-            )
-        else:
-            table_component = dbc.Alert("No reliable forecast data available for the selected options.", color="warning")
-
-        fig.update_layout(
-            title="Severity Forecast (Next 12 Months)" if forecast_type == "severity"
-            else "Complaint Volume Forecast (Next 12 Months)",
-            yaxis_title="Average Severity" if forecast_type == "severity" else "Complaints",
-            plot_bgcolor="#140327",
-            paper_bgcolor="#140327",
-            font_color="white"
+    # NO FORECASTS?
+    if not all_forecasts:
+        return (
+            empty_figure("No forecast data available for this selection"),
+            dbc.Alert("No forecast rows available.", color="warning"),
+            "No forecast rows available.",
+            True,
+            "warning",
+            subtitle
         )
 
-        # Alert with reliability messages
-        alert_text = "\n".join(reliability_msgs)
-        show_alert = bool(alert_text)
+    # BUILD TABLE
+    display_table = pd.concat(all_forecasts, ignore_index=True)
+    display_table = display_table.sort_values(by=["Month_dt", "Neighborhood"])
 
-        if any(msg.split(":")[1].strip().startswith("Unreliable") for msg in reliability_msgs):
-            alert_color = "danger"
-        elif any(msg.split(":")[1].strip().startswith("Possibly Unreliable") for msg in reliability_msgs):
-            alert_color = "warning"
-        else:
-            alert_color = "info"
+    if forecast_type == "severity":
+        columns = ["Month", "Neighborhood", "Item", "Predicted Severity", "Rolling Trend", "Rolling % Change"]
+    else:
+        columns = ["Month", "Neighborhood", "Item", "Predicted Complaints", "Rolling Trend", "Rolling % Change"]
 
-    subtitle = f"Forecasting {forecast_level.title()} {forecast_type.title()} Trends"
+    display_table = display_table[columns]
+    display_table = display_table.rename(columns={"Item": forecast_level.title()})
+
+    table_component = dbc.Card(
+        dbc.CardBody(
+            html.Div(
+                make_table(display_table),
+                style={"maxHeight": "410px", "overflowY": "auto"}
+            )
+        ),
+        className="bg-dark border-dark mb-4"
+    )
+
+    # CHART STYLE
+    fig.update_layout(
+        title=f"{forecast_type.title()} Forecast (Next {horizon} Months)",
+        yaxis_title="Complaints" if forecast_type == "volume" else "Severity",
+        plot_bgcolor="#140327",
+        paper_bgcolor="#140327",
+        font_color="white"
+    )
+
+    # ALERT MESSAGE
+    alert_text = "\n".join(reliability_msgs)
+    show_alert = True
+    alert_color = (
+        "danger" if "Unreliable" in alert_text else
+        "warning" if "Possibly" in alert_text else
+        "info"
+    )
 
     return fig, table_component, alert_text, show_alert, alert_color, subtitle
