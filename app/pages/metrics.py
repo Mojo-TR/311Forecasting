@@ -5,7 +5,7 @@ from app.utils.data_loader import df
 import dash_bootstrap_components as dbc
 from app.utils.utils import make_table, category_to_types, empty_figure
 
-register_page(__name__, path="/metrics", title="Neighborhood Metrics")
+register_page(__name__, path="/neighborhood-metrics", title="Neighborhood Metrics")
 
 # Prepare data
 df["MonthName"] = df["CREATED DATE"].dt.month_name()
@@ -51,16 +51,19 @@ layout = dbc.Container([
 
     html.H5(id="selected-metric-display", className="text-white text-center mt-4 mb-4"),
 
-    # Chart + Legend Row
+    # Chart + Legend Row (each with its own spinner)
     dbc.Row([
         # Chart
         dbc.Col(
             dbc.Card(
                 dbc.CardBody(
                     dbc.Spinner(
-                        dcc.Graph(id="stackedbar-graph", style={"minWidth": "1200px"}),
-                        type="grow",
+                        dcc.Graph(
+                            id="stackedbar-graph",
+                            style={"minWidth": "1200px"}
+                        ),
                         color="primary",
+                        type="grow",
                         size="lg"
                     )
                 ),
@@ -70,7 +73,6 @@ layout = dbc.Container([
                 style={
                     "overflowX": "auto",
                     "padding": "10px",
-                    "borderRadius": "8px"
                 }
             ),
             width=9
@@ -82,8 +84,8 @@ layout = dbc.Container([
                 dbc.CardBody(
                     dbc.Spinner(
                         html.Div(id="stackedbar-legend"),
-                        type="grow",
                         color="primary",
+                        type="grow",
                         size="lg"
                     )
                 ),
@@ -94,7 +96,6 @@ layout = dbc.Container([
                     "height": "700px",
                     "overflowY": "auto",
                     "padding": "10px",
-                    "borderRadius": "8px"
                 }
             ),
             width=3
@@ -106,7 +107,6 @@ layout = dbc.Container([
         dbc.Col(
             dbc.Card(
                 dbc.CardBody([
-
                     # Neighborhood Dropdown
                     dbc.Row([
                         dbc.Col([
@@ -120,65 +120,60 @@ layout = dbc.Container([
                         ], width="auto")
                     ], className="mb-4"),
 
-                    # Pie + Table Row
+                    # Pie + Table Row (ONE spinner for both)
                     dbc.Row([
-
-                        # Pie Chart
-                        dbc.Col(
-                            dbc.Card(
-                                dbc.CardBody(
-                                    dbc.Spinner(
-                                        dcc.Graph(
-                                            id="metric-pie-chart",
-                                            config={"displayModeBar": False},
-                                            style={"height": "450px"}
+                        dbc.Spinner(
+                            dbc.Row([
+                                # Pie Chart
+                                dbc.Col(
+                                    dbc.Card(
+                                        dbc.CardBody(
+                                            dcc.Graph(
+                                                id="metric-pie-chart",
+                                                config={"displayModeBar": False},
+                                                style={"height": "450px"}
+                                            )
                                         ),
-                                        type="grow",
-                                        color="primary",
-                                        size="lg"
-                                    )
+                                        color="dark",
+                                        outline=True,
+                                        className="border-secondary shadow-sm",
+                                    ),
+                                    width=5,
+                                    style={"paddingRight": "8px"}
                                 ),
-                                color="dark",
-                                outline=True,
-                                className="border-secondary shadow-sm",
-                                style={"borderRadius": "10px"}
-                            ),
-                            width=5,
-                            style={"paddingRight": "8px"}
-                        ),
 
-                        # Table
-                        dbc.Col(
-                            dbc.Card(
-                                dbc.CardBody(
-                                    dbc.Spinner(
-                                        html.Div(
-                                            id="stackedbar-table",
-                                            style={
-                                                "maxHeight": "450px",
-                                                "overflowY": "auto",
-                                                "paddingRight": "6px"
-                                            }
+                                # Table
+                                dbc.Col(
+                                    dbc.Card(
+                                        dbc.CardBody(
+                                            html.Div(
+                                                id="stackedbar-table",
+                                                style={
+                                                    "maxHeight": "450px",
+                                                    "overflowY": "auto",
+                                                    "paddingRight": "6px"
+                                                }
+                                            )
                                         ),
-                                        type="grow",
-                                        color="primary",
-                                        size="lg"
-                                    )
-                                ),
-                                color="dark",
-                                outline=True,
-                                className="border-secondary shadow-sm",
-                                style={"borderRadius": "10px"}
-                            ),
-                            width=7,
-                            style={"paddingLeft": "8px"}
+                                        color="dark",
+                                        outline=True,
+                                        className="border-secondary shadow-sm",
+                                    ),
+                                    width=7,
+                                    style={"paddingLeft": "8px"}
+                                )
+
+                            ], className="g-0"),
+
+                            color="primary",
+                            type="grow",
+                            size="lg"
                         )
-
-                    ], className="g-0")  # Zero spacing between columns but controlled via padding
+                    ])
                 ]),
                 color="dark",
                 className="border-dark bg-dark",
-                style={"padding": "20px", "borderRadius": "8px"}
+                style={"padding": "20px"}
             ),
             width=12
         )
@@ -315,7 +310,6 @@ def update_bar(selected_metric, selected_month, selected_neighborhood):
                             "backgroundColor": color_map.get(cat, "#555"),
                             "padding": "8px",
                             "marginBottom": "4px",
-                            "borderRadius": "4px",
                             "color": "#FFF",
                             "fontWeight": "bold"
                         },
@@ -342,7 +336,6 @@ def update_bar(selected_metric, selected_month, selected_neighborhood):
                     "backgroundColor": color_map.get(cat, "#555"),
                     "padding": "8px",
                     "margin": "2px",
-                    "borderRadius": "4px",
                     "color": "#FFF"
                 }
             )

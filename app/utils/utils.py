@@ -11,9 +11,9 @@ def navbar():
             dbc.DropdownMenu(
                 children=[
                     dbc.NavItem(dbc.NavLink("Map", href="/map")),
-                    dbc.NavItem(dbc.NavLink("Complaints Over Time", href="/complaints")),
-                    dbc.NavItem(dbc.NavLink("Neighborhood Metrics", href="/metrics")),
-                    dbc.NavItem(dbc.NavLink("Resolution Insights", href="/resolution")),
+                    dbc.NavItem(dbc.NavLink("Complaints Trends", href="/complaint-trends")),
+                    dbc.NavItem(dbc.NavLink("Neighborhood Metrics", href="/neighborhood-metrics")),
+                    dbc.NavItem(dbc.NavLink("Resolution Insights", href="/resolution-insights")),
                 ],
                 nav=True,
                 in_navbar=True,

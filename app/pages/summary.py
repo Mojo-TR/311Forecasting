@@ -349,117 +349,118 @@ layout = dbc.Container(
         ),
 
         # SYSTEM SNAPSHOT + TREND/RISK WITH ONE SPINNER
-        dcc.Loading(
-            id="snapshot-loader",
-            type="circle",
-            children=[
+        dbc.Spinner(
+        children=html.Div([
 
-                # SYSTEM SNAPSHOT ROW
-                dbc.Row(
-                    [
-                        # Left: Volume Breakdown
-                        dbc.Col(
-                            dbc.Card(
-                                dbc.CardBody(
-                                    [
-                                        html.H4("Complaint Volume Breakdown", className="text-white mb-3"),
-                                        dbc.Tabs(
-                                            [
-                                                dbc.Tab(label="Category", tab_id="vol-cat", labelClassName="text-info-emphasis"),
-                                                dbc.Tab(label="Department", tab_id="vol-dept", labelClassName="text-info-emphasis"),
-                                                dbc.Tab(label="Neighborhood", tab_id="vol-nbh", labelClassName="text-info-emphasis"),
-                                            ],
-                                            id="vol-tabs",
-                                            active_tab="vol-cat",
-                                            className="mb-3 custom-tabs",
-                                        ),
-                                        html.Div(
-                                            dcc.Graph(id="volume-treemap"),
-                                            style={"height": "400px"}
-                                        ),
-                                    ]
-                                ),
-                                className="bg-dark border-dark h-100",
+            # SYSTEM SNAPSHOT ROW
+            dbc.Row(
+                [
+                    # Left: Volume Breakdown
+                    dbc.Col(
+                        dbc.Card(
+                            dbc.CardBody(
+                                [
+                                    html.H4("Complaint Volume Breakdown", className="text-white mb-3"),
+                                    dbc.Tabs(
+                                        [
+                                            dbc.Tab(label="Category", tab_id="vol-cat", labelClassName="text-info-emphasis"),
+                                            dbc.Tab(label="Department", tab_id="vol-dept", labelClassName="text-info-emphasis"),
+                                            dbc.Tab(label="Neighborhood", tab_id="vol-nbh", labelClassName="text-info-emphasis"),
+                                        ],
+                                        id="vol-tabs",
+                                        active_tab="vol-cat",
+                                        className="mb-3 custom-tabs",
+                                    ),
+                                    html.Div(
+                                        dcc.Graph(id="volume-treemap"),
+                                        style={"height": "400px"}
+                                    ),
+                                ]
                             ),
-                            md=6,
-                            className="mb-4",
+                            className="bg-dark border-dark h-100",
                         ),
+                        md=6,
+                        className="mb-4",
+                    ),
 
-                        # Right: 12-Month Volume Trend
-                        dbc.Col(
-                            dbc.Card(
-                                dbc.CardBody(
-                                    [
-                                        html.H4("12-Month Volume Trend", className="text-white mb-3"),
-                                        html.Div(
-                                            dcc.Graph(id="volume-trend"),
-                                            style={"height": "420px"}
-                                        ),
-                                    ]
-                                ),
-                                className="bg-dark border-dark h-100",
+                    # Right: 12-Month Volume Trend
+                    dbc.Col(
+                        dbc.Card(
+                            dbc.CardBody(
+                                [
+                                    html.H4("12-Month Volume Trend", className="text-white mb-3"),
+                                    html.Div(
+                                        dcc.Graph(id="volume-trend"),
+                                        style={"height": "420px"}
+                                    ),
+                                ]
                             ),
-                            md=6,
-                            className="mb-4",
+                            className="bg-dark border-dark h-100",
                         ),
-                    ]
-                ),
+                        md=6,
+                        className="mb-4",
+                    ),
+                ]
+            ),
 
-                # TREND / RISK CARDS
-                dbc.Row(
-                    [
-                        dbc.Col(
-                            dbc.Card(
-                                dbc.CardBody(
-                                    [
-                                        html.H4("Slowest Areas (Resolution Time)", className="text-white mb-3"),
-                                        dbc.Tabs(
-                                            [
-                                                dbc.Tab(label="Department", tab_id="slow-dept", labelClassName="text-info-emphasis"),
-                                                dbc.Tab(label="Category", tab_id="slow-cat", labelClassName="text-info-emphasis"),
-                                                dbc.Tab(label="Neighborhood", tab_id="slow-nbh", labelClassName="text-info-emphasis"),
-                                            ],
-                                            id="slow-tabs",
-                                            active_tab="slow-dept",
-                                            className="mb-3 custom-tabs",
-                                        ),
-                                        html.Div(id="slow-content"),
-                                    ]
-                                ),
-                                className="bg-dark border-dark h-100",
+            # TREND / RISK CARDS
+            dbc.Row(
+                [
+                    dbc.Col(
+                        dbc.Card(
+                            dbc.CardBody(
+                                [
+                                    html.H4("Slowest Areas (Resolution Time)", className="text-white mb-3"),
+                                    dbc.Tabs(
+                                        [
+                                            dbc.Tab(label="Department", tab_id="slow-dept", labelClassName="text-info-emphasis"),
+                                            dbc.Tab(label="Category", tab_id="slow-cat", labelClassName="text-info-emphasis"),
+                                            dbc.Tab(label="Neighborhood", tab_id="slow-nbh", labelClassName="text-info-emphasis"),
+                                        ],
+                                        id="slow-tabs",
+                                        active_tab="slow-dept",
+                                        className="mb-3 custom-tabs",
+                                    ),
+                                    html.Div(id="slow-content"),
+                                ]
                             ),
-                            md=6,
-                            className="mb-4 d-flex",
+                            className="bg-dark border-dark h-100",
                         ),
+                        md=6,
+                        className="mb-4 d-flex",
+                    ),
 
-                        dbc.Col(
-                            dbc.Card(
-                                dbc.CardBody(
-                                    [
-                                        html.H4("SLA Risk Flags", className="text-white mb-3"),
-                                        dbc.Tabs(
-                                            [
-                                                dbc.Tab(label="Department", tab_id="sla-dept", labelClassName="text-info-emphasis"),
-                                                dbc.Tab(label="Category", tab_id="sla-cat", labelClassName="text-info-emphasis"),
-                                                dbc.Tab(label="Neighborhood", tab_id="sla-nbh", labelClassName="text-info-emphasis"),
-                                            ],
-                                            id="sla-tabs",
-                                            active_tab="sla-dept",
-                                            className="mb-3 custom-tabs",
-                                        ),
-                                        html.Div(id="sla-content"),
-                                    ]
-                                ),
-                                className="bg-dark border-dark h-100",
+                    dbc.Col(
+                        dbc.Card(
+                            dbc.CardBody(
+                                [
+                                    html.H4("SLA Risk Flags", className="text-white mb-3"),
+                                    dbc.Tabs(
+                                        [
+                                            dbc.Tab(label="Department", tab_id="sla-dept", labelClassName="text-info-emphasis"),
+                                            dbc.Tab(label="Category", tab_id="sla-cat", labelClassName="text-info-emphasis"),
+                                            dbc.Tab(label="Neighborhood", tab_id="sla-nbh", labelClassName="text-info-emphasis"),
+                                        ],
+                                        id="sla-tabs",
+                                        active_tab="sla-dept",
+                                        className="mb-3 custom-tabs",
+                                    ),
+                                    html.Div(id="sla-content"),
+                                ]
                             ),
-                            md=6,
-                            className="mb-4 d-flex",
+                            className="bg-dark border-dark h-100",
                         ),
-                    ]
-                )
-            ]
-        ),
+                        md=6,
+                        className="mb-4 d-flex",
+                    ),
+                ]
+            )
 
+        ]),
+        color="primary",
+        type="grow",
+        size="lg",
+    ),
     # Data Dictionary Accordion + Modal Trigger
     dbc.Card(
         dbc.CardBody(
@@ -590,13 +591,13 @@ def update_summary_kpis(selected_month):
 
     if num_months > 0:
         avg_per_month = total_complaints / num_months
-        avg_month_text = f"{avg_per_month:.1f}"
+        avg_month_text = f"{avg_per_month:,.0f}"
     else:
         avg_month_text = "—"
 
     # Median resolution
     median_res = filtered["RESOLUTION_TIME_DAYS"].median()
-    median_res_text = f"{median_res:.1f}" if pd.notna(median_res) else "—"
+    median_res_text = f"{median_res:.0f}" if pd.notna(median_res) else "—"
 
     # SLA Metrics (exclude missing SLA)
     valid_sla = filtered.dropna(subset=["SLA_DAYS", "RESOLUTION_TIME_DAYS"])
@@ -815,12 +816,13 @@ def update_volume_trend(_selected_month):
         x="YearMonth",
         y="Count",
         markers=True,
+        template="plotly_dark",
         title="Complaint Volume — Last 12 Months",
     )
 
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="#140327",
+        plot_bgcolor="rgba(0,0,0,0)",
         font_color="white",
         xaxis_title="Month",
         yaxis_title="Complaints",

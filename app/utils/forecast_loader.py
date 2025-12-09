@@ -30,7 +30,7 @@ def get_home_forecast_summary():
     # Return text summary for homepage.
     global forecast_df, forecast_ready
     if not forecast_ready or forecast_df is None:
-        return "Forecasts loading..."
+        return ""
 
     now = pd.Timestamp.now()
     current_row = forecast_df[(forecast_df["ds"].dt.month == now.month) &
@@ -40,4 +40,4 @@ def get_home_forecast_summary():
         return "No forecast available for current month."
 
     value = current_row["yhat"].values[0]
-    return f"{value:,.0f}"
+    return f"{value:.0f}"

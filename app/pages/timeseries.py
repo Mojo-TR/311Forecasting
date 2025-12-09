@@ -6,7 +6,7 @@ import calendar
 from app.utils.data_loader import df
 from app.utils.utils import empty_figure
 
-register_page(__name__, path="/complaints", title="Complaints Over Time")
+register_page(__name__, path="/complaint-trends", title="Complaints Over Time")
 
 # Ensure date fields exist
 df["Month"] = df["CREATED DATE"].dt.month_name()
@@ -166,6 +166,7 @@ def update_timeseries(selected_neigh, mode):
         line_group="LineGroup",
         markers=True,
         render_mode="webgl",
+        template="plotly_dark",
         title=f"{'Seasonal' if mode=='seasonal' else 'Monthly'} Complaint Trends" +
               (f" — {selected_neigh}" if selected_neigh else ""),
         labels={"Count": "Report Count", x_col: x_col},

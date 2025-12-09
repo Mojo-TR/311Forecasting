@@ -8,7 +8,7 @@ from app.utils.data_loader import df
 from app.utils.utils import make_table, empty_figure, empty_table
 
 
-register_page(__name__, path="/resolution", title="Resolution Insights")
+register_page(__name__, path="/resolution-insights", title="Resolution Insights")
 
 # Precompute Month Names
 df["MonthName"] = df["CREATED DATE"].dt.month_name()
@@ -31,86 +31,77 @@ layout = dbc.Container([
 
     # KPI Row
     dbc.Row(id="resolution-kpi-row", className="mb-4"),
+    
+    dbc.Spinner(
+        children=html.Div([
 
-    # Ranking Table
-    dbc.Row([
-        dbc.Col(
-            dbc.Card(
-                dbc.CardBody([
-                    html.H4("Neighborhood Resolution Ranking", className="text-white"),
-                    html.Div(
-                        id="resolution-table",
-                        style={
-                            "maxHeight": "500px",
-                            "overflowY": "auto",
-                            "paddingRight": "10px"
-                        }
+            # Ranking Table
+            dbc.Row([
+                dbc.Col(
+                    dbc.Card(
+                        dbc.CardBody([
+                            html.H4("Neighborhood Resolution Ranking", className="text-white"),
+                            html.Div(
+                                id="resolution-table",
+                                style={
+                                    "maxHeight": "500px",
+                                    "overflowY": "auto",
+                                    "paddingRight": "10px"
+                                }
+                            )
+                        ]),
+                        className="bg-dark border-dark"
                     )
-                ])
-                , className="bg-dark border-dark"),
-        )
-    ], className="mb-4"),
+                )
+            ], className="mb-4"),
 
-    # SLA Heatmap
-    dbc.Row([
-        dbc.Col(
-            dbc.Card(
-                dbc.CardBody([
-                    html.H4("SLA Performance Heatmap", className="text-white"),
-                    dbc.Spinner(
-                        html.Div(
-                            dcc.Graph(id="resolution-sla-heatmap"),
-                            style={
-                                "maxHeight": "500px",
-                                "overflowY": "auto"
-                            }
-                        ),
-                        type="grow",
-                        color="primary",
-                        size="lg"
+            # SLA Heatmap
+            dbc.Row([
+                dbc.Col(
+                    dbc.Card(
+                        dbc.CardBody([
+                            html.H4("SLA Performance Heatmap", className="text-white"),
+                            dcc.Graph(id="resolution-sla-heatmap")
+                        ]),
+                        className="bg-dark border-dark"
                     )
-                ]),
-                className="bg-dark border-dark"
-            )
-        )
-    ], className="mb-4"),
+                )
+            ], className="mb-4"),
 
-    # Trend Over Time
-    dbc.Row([
-        dbc.Col(
-            dbc.Card(
-                dbc.CardBody([
-                    html.H4("Resolution Trend Over Time", className="text-white"),
-                    dbc.Spinner(
-                        dcc.Graph(id="resolution-trend"),
-                        type="grow",
-                        color="primary",
-                        size="lg"
+            # Trend Over Time
+            dbc.Row([
+                dbc.Col(
+                    dbc.Card(
+                        dbc.CardBody([
+                            html.H4("Resolution Trend Over Time", className="text-white"),
+                            dcc.Graph(id="resolution-trend")
+                        ]),
+                        className="bg-dark border-dark"
                     )
-                ]),
-                className="bg-dark border-dark"
-            )
-        )
-    ], className="mb-4"),
+                )
+            ], className="mb-4"),
 
-    # Volume vs Resolution Scatter
-    dbc.Row([
-        dbc.Col(
-            dbc.Card(
-                dbc.CardBody([
-                    html.H4("Volume vs Average Resolution Time", className="text-white"),
-                    dbc.Spinner(
-                        dcc.Graph(id="resolution-scatter"),
-                        type="grow",
-                        color="primary",
-                        size="lg"
+            # Volume vs Resolution Scatter
+            dbc.Row([
+                dbc.Col(
+                    dbc.Card(
+                        dbc.CardBody([
+                            html.H4("Volume vs Average Resolution Time", className="text-white"),
+                            dcc.Graph(id="resolution-scatter")
+                        ]),
+                        className="bg-dark border-dark"
                     )
-                ]),
-                className="bg-dark border-dark"
-            )
-        )
-    ], className="mb-4"),
+                )
+            ], className="mb-4"),
 
+        ]),
+
+        color="primary",
+        type="grow",
+        fullscreen=True,
+        fullscreen_style={"backgroundColor": "rgba(0, 0, 0, 0)"}
+    ),
+    
     html.Div([
         dbc.Button("🏠 Home", href="/", color="primary", className="mt-4")
     ], style={"textAlign": "center"})
@@ -275,6 +266,7 @@ def update_resolution_page(selected_month):
             x="Month",
             y="RESOLUTION_TIME_DAYS",
             markers=True,
+            template="plotly_dark",
             labels={"RESOLUTION_TIME_DAYS": "Avg Resolution (Days)"}
         )
         trend_fig.update_layout(
@@ -294,6 +286,7 @@ def update_resolution_page(selected_month):
             y="Avg_Resolution",
             text="NEIGHBORHOOD",
             color="Avg_Resolution",
+            template="plotly_dark",
             color_continuous_scale="Plasma",
         )
         scatter_fig.update_layout(

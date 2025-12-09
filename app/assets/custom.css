@@ -93,3 +93,7 @@
     background: rgba(20, 3, 39, 0.35); /* matches your dashboard background */
     backdrop-filter: blur(2px);
 }
+
+.card {
+    border-radius: 10px !important;
+}

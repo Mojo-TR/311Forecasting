@@ -182,9 +182,9 @@ layout = dbc.Container([
 
     dbc.Row([
         dbc.Col(dbc.Button("Map", color="primary", href="/map", size="lg", className="w-100"), width=3),
-        dbc.Col(dbc.Button("Complaints Over Time", color="primary", href="/complaints", size="lg", className="w-100"), width=3),
-        dbc.Col(dbc.Button("Neighborhood Metrics", color="primary", href="/metrics", size="lg", className="w-100"), width=3),
-        dbc.Col(dbc.Button("Resolution Insights", color="primary", href="/resolution", size="lg", className="w-100"), width=3),
+        dbc.Col(dbc.Button("Complaint Trends", color="primary", href="/complaint-trends", size="lg", className="w-100"), width=3),
+        dbc.Col(dbc.Button("Neighborhood Metrics", color="primary", href="/neighborhood-metrics", size="lg", className="w-100"), width=3),
+        dbc.Col(dbc.Button("Resolution Insights", color="primary", href="/resolution-insights", size="lg", className="w-100"), width=3),
     ], justify="center", className="mb-4"),
 
     dcc.Interval(id="interval-refresh", interval=5000, n_intervals=0),
@@ -325,7 +325,7 @@ layout = dbc.Container([
                     html.Li(
                         html.A(
                             "See More", 
-                            href="/complaints-over-time", 
+                            href="/complaint-trends", 
                             className="text-decoration-none text-primary"
                         ), 
                         className="breadcrumb-item active"
@@ -378,7 +378,7 @@ layout = dbc.Container([
                             html.Li(
                                 html.A(
                                     "See More",
-                                    href="/metrics",
+                                    href="/neighborhood-metrics",
                                     className="text-decoration-none text-primary"
                                 ),
                                 className="breadcrumb-item active"
@@ -387,7 +387,23 @@ layout = dbc.Container([
                 )],width=6
         )],justify="center",
     className="mb-5"
-),
+    ),
+    
+    # Summary Page Quick Link
+    html.H5("Explore Detailed Summary", className="text-center text-white mt-4"),
+
+    dbc.Row([
+        dbc.Col(
+            dbc.Button(
+                "Go to Summary →",
+                href="/summary",
+                color="info",
+                size="lg",
+                className="w-150 d-block mx-auto"
+            ),
+            width="auto"
+        )
+    ], className="mb-5", justify="center"),
 
 ])
 # Callback for Top 5 Summary

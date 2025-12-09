@@ -93,7 +93,7 @@ layout = dbc.Container([
                 min=3,
                 max=18,
                 step=3,
-                value=12,   # default
+                value=12,
                 marks={i: str(i) for i in range(3, 19, 3)}
             )
         ], width=6),
@@ -101,7 +101,7 @@ layout = dbc.Container([
         className="mb-4"
     ),
 
-    # Graph
+    # Forecast Graph Card
     dbc.Card(
         dbc.CardBody(
             dbc.Spinner(
@@ -110,25 +110,34 @@ layout = dbc.Container([
                     figure={},
                     style={"height": "500px"}
                 ),
-                size="lg",
                 color="primary",
-                type="grow", 
-                fullscreen=False 
+                type="grow",
+                size="lg"
             )
         ),
         className="bg-dark border-dark mb-4"
     ),
 
-    html.H5("Monthly Complaint Predictions & Bias", className="text-center text-white mb-4"),
-
-    # Table
     dbc.Row(
         dbc.Col(
-            dbc.Spinner(
-                html.Div(id="forecast-table-container"),
-                size="lg",
-                color="primary",
-                type="grow"
+            dbc.Card(
+                dbc.CardBody([
+                    html.H5(
+                        "Monthly Complaint Predictions",
+                        className="text-center text-white mb-4"
+                    ),
+
+                    dbc.Spinner(
+                        html.Div(
+                            id="forecast-table-container",
+                            style={"maxHeight": "500px", "overflowY": "auto"}  # optional scroll
+                        ),
+                        color="primary",
+                        type="grow",
+                        size="lg"
+                    )
+                ]),
+                className="bg-dark border-dark mb-4"
             ),
             width=10
         ),
@@ -136,9 +145,20 @@ layout = dbc.Container([
         className="mb-4"
     ),
 
-    dbc.Alert(id="forecast-alert", is_open=False, className="mb-4",
-              style={"textAlign": "center", "fontWeight": "bold", "fontSize": "18px", "borderRadius": "12px",
-                     "margin": "auto", "width": "50%"}),
+    # Alert
+    dbc.Alert(
+        id="forecast-alert",
+        is_open=False,
+        className="mb-4",
+        style={
+            "textAlign": "center",
+            "fontWeight": "bold",
+            "fontSize": "18px",
+            "borderRadius": "12px",
+            "margin": "auto",
+            "width": "50%"
+        }
+    ),
 
     dbc.Row([dbc.Col(dbc.Button("🏠 Home", href="/", color="primary"), width="auto")], justify="center"),
 ])
@@ -365,9 +385,10 @@ def update_forecasts(selected_neighs, forecast_level, selected_item, forecast_ty
     fig.update_layout(
         title=f"{forecast_type.title()} Forecast (Next {horizon} Months)",
         yaxis_title="Complaints" if forecast_type == "volume" else "Severity",
-        plot_bgcolor="#140327",
-        paper_bgcolor="#140327",
-        font_color="white"
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font_color="white",
+        template="plotly_dark",
     )
 
     # ALERT MESSAGE
