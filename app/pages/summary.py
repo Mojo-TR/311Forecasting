@@ -3,128 +3,43 @@ import dash_bootstrap_components as dbc
 import plotly.express as px
 import pandas as pd
 
-from app.utils.data_loader import df
-from app.utils.utils import make_table, category_to_types
+from app.utils.utils import make_table, empty_table, empty_figure
 
 register_page(__name__, path="/summary", title="Summary")
 
+# LOAD PRECOMPUTED DATA
+BASE = "precomputed_data/summary/"
 
-# Helpers for tables
-def build_slowest_table(df_in: pd.DataFrame, group_col: str, min_count: int = 20):
-    """
-    Build a table of the slowest groups by median RESOLUTION_TIME_DAYS.
-    """
-    if group_col not in df_in.columns:
-        return html.P(f"{group_col} column not found.", className="text-muted")
+KPI_MONTHLY = pd.read_parquet(BASE + "kpi_monthly.parquet")
+SLOW_DEPT = pd.read_parquet(BASE + "slowest_department.parquet")
+SLOW_CAT = pd.read_parquet(BASE + "slowest_category.parquet")
+SLOW_NBH = pd.read_parquet(BASE + "slowest_neighborhood.parquet")
 
-    temp = (
-        df_in
-        .dropna(subset=["RESOLUTION_TIME_DAYS", group_col])
-        .groupby(group_col)["RESOLUTION_TIME_DAYS"]
-        .agg(["median", "count"])
-        .reset_index()
-    )
+SLA_DEPT = pd.read_parquet(BASE + "sla_risk_department.parquet")
+SLA_CAT = pd.read_parquet(BASE + "sla_risk_category.parquet")
+SLA_NBH = pd.read_parquet(BASE + "sla_risk_neighborhood.parquet")
 
-    temp = temp[temp["count"] >= min_count]
-    if temp.empty:
-        return html.P(f"Not enough data for {group_col.lower()}.", className="text-muted")
+VOLUME_COUNTS = pd.read_parquet(BASE + "volume_counts.parquet")
+VOLUME_TREND = pd.read_parquet(BASE + "volume_monthly.parquet")
 
-    temp = temp.sort_values("median", ascending=False)
-    temp["median"] = temp["median"].round(1)
+CATEGORY_CASETYPES = pd.read_parquet(BASE + "category_case_types.parquet")
 
-    temp = temp.rename(
-        columns={
-            group_col: group_col.title(),
-            "median": "Median Days",
-            "count": "Cases",
-        }
-    )
+CATEGORY_TO_TYPES = {
+    row["CATEGORY"]: row["CaseTypes"] 
+    for _, row in CATEGORY_CASETYPES.iterrows()
+}
 
-    return make_table(temp.head(10))
+# MONTH DROPDOWN OPTIONS (correct!)
+MONTH_LIST = sorted(KPI_MONTHLY["MonthName"].unique())
+month_options = (
+    [{"label": "All Months", "value": "all"}] +
+    [{"label": m, "value": m} for m in MONTH_LIST if m != "all"]
+)
 
-
-def build_sla_risk_table(df_in: pd.DataFrame, group_col: str, min_count: int = 20):
-    """
-    Build a table showing SLA risk (lowest SLA compliance first).
-    """
-    if group_col not in df_in.columns:
-        return html.P(f"{group_col} column not found.", className="text-muted")
-
-    temp = df_in.dropna(subset=["SLA_DAYS", "RESOLUTION_TIME_DAYS", group_col]).copy()
-    if temp.empty:
-        return html.P(f"No SLA data for {group_col.lower()}.", className="text-muted")
-
-    temp["WITHIN_SLA"] = temp["RESOLUTION_TIME_DAYS"] <= temp["SLA_DAYS"]
-
-    agg = (
-        temp
-        .groupby(group_col)
-        .agg(
-            cases=("RESOLUTION_TIME_DAYS", "size"),
-            sla_rate=("WITHIN_SLA", "mean"),
-        )
-        .reset_index()
-    )
-
-    agg = agg[agg["cases"] >= min_count]
-    if agg.empty:
-        return html.P(
-            f"Not enough data for SLA analysis on {group_col.lower()}.",
-            className="text-muted",
-        )
-
-    agg["SLA %"] = (agg["sla_rate"] * 100).round(1)
-    agg = agg.sort_values("SLA %").reset_index(drop=True)
-
-    agg = agg.rename(
-        columns={
-            group_col: group_col.title(),
-            "cases": "Cases",
-        }
-    ).drop(columns=["sla_rate"])
-
-    return make_table(agg.head(10))
-
-# Month dropdown options
-month_options = [{"label": "All Months", "value": "all"}] + [
-    {
-        "label": m,
-        "value": m,
-    }
-    for m in sorted(
-        df["MonthName"].dropna().unique(),
-        key=lambda x: pd.to_datetime(x, format="%B").month,
-    )
-]
-
-# Categories for modal dropdown
-if "CATEGORY" in df.columns:
-    category_values = sorted(df["CATEGORY"].dropna().unique())
-else:
-    category_values = []
-
+# CATEGORY DROPDOWN FOR MODAL
+category_values = sorted(CATEGORY_TO_TYPES.keys())
 category_options = [{"label": c, "value": c} for c in category_values]
 default_category_value = category_options[0]["value"] if category_options else None
-
-# Data-driven SLA per CATEGORY (80th percentile)
-if (
-    "CATEGORY" in df.columns
-    and "RESOLUTION_TIME_DAYS" in df.columns
-    and "SLA_DAYS" not in df.columns
-):
-    sla_by_category = (
-        df
-        .dropna(subset=["CATEGORY", "RESOLUTION_TIME_DAYS"])
-        .groupby("CATEGORY")["RESOLUTION_TIME_DAYS"]
-        .quantile(0.80)
-        .round(1)
-        .to_dict()
-    )
-    df["SLA_DAYS"] = df["CATEGORY"].map(sla_by_category)
-else:
-    # Ensure column exists even if we couldn't compute it
-    if "SLA_DAYS" not in df.columns:
-        df["SLA_DAYS"] = pd.NA
 
 
 # Data Dictionary (static metadata)
@@ -475,7 +390,7 @@ layout = dbc.Container(
                             [
                                 html.P(
                                     "Reference for the main fields used across this dashboard.",
-                                    className="text-muted",
+                                    className="text-info",
                                 ),
                                 html.Div(
                                     build_data_dictionary_table(),
@@ -490,7 +405,7 @@ layout = dbc.Container(
                                         ),
                                         html.P(
                                             "Use the browser below to see which case types belong to each category.",
-                                            className="text-muted",
+                                            className="text-white",
                                         ),
                                         dbc.Button(
                                             "Open Case Type Browser",
@@ -501,7 +416,7 @@ layout = dbc.Container(
                                     ]
                                 ),
                             ],
-                            title="Data Dictionary",
+                            title=html.Span("Data Dictionary", className="text-info"),
                         )
                     ],
                     start_collapsed=True,
@@ -565,7 +480,7 @@ layout = dbc.Container(
 )
 
 
-# Callbacks – KPIs
+# KPI CALLBACK
 @callback(
     Output("kpi-total-complaints", "children"),
     Output("kpi-median-resolution", "children"),
@@ -573,167 +488,83 @@ layout = dbc.Container(
     Output("kpi-avg-month", "children"),
     Input("summary-month-dropdown", "value"),
 )
-def update_summary_kpis(selected_month):
-    filtered = df.copy()
+def update_summary_kpis(month):
 
-    if selected_month and selected_month != "all":
-        filtered = filtered[filtered["MonthName"] == selected_month]
+    row = KPI_MONTHLY[KPI_MONTHLY["MonthName"] == month]
 
-    if filtered.empty or "RESOLUTION_TIME_DAYS" not in filtered.columns:
-        return "0", "—", "—", "0"
+    if row.empty:
+        return "0", "—", "—", "—"
 
-    # Compute number of distinct months in filtered data
-    filtered = filtered.assign(YearMonth=filtered["CREATED DATE"].dt.to_period("M"))
-    num_months = filtered["YearMonth"].nunique()
-
-    # Total complaints
-    total_complaints = len(filtered)
-
-    if num_months > 0:
-        avg_per_month = total_complaints / num_months
-        avg_month_text = f"{avg_per_month:,.0f}"
-    else:
-        avg_month_text = "—"
-
-    # Median resolution
-    median_res = filtered["RESOLUTION_TIME_DAYS"].median()
-    median_res_text = f"{median_res:.0f}" if pd.notna(median_res) else "—"
-
-    # SLA Metrics (exclude missing SLA)
-    valid_sla = filtered.dropna(subset=["SLA_DAYS", "RESOLUTION_TIME_DAYS"])
-    if not valid_sla.empty:
-        within_sla_mask = (
-            valid_sla["RESOLUTION_TIME_DAYS"] <= valid_sla["SLA_DAYS"]
-        )
-        sla_rate = within_sla_mask.mean() * 100
-        sla_rate_text = f"{sla_rate:.1f}%"
-    else:
-        sla_rate_text = "—"
+    r = row.iloc[0]
 
     return (
-        f"{total_complaints:,}",
-        median_res_text,
-        sla_rate_text,
-        avg_month_text,
-    )
-
-# Callbacks – Case Types Modal
-@callback(
-    Output("case-types-modal", "is_open"),
-    Input("open-case-modal", "n_clicks"),
-    Input("close-case-modal", "n_clicks"),
-    State("case-types-modal", "is_open"),
-    prevent_initial_call=True,
-)
-def toggle_case_types_modal(open_clicks, close_clicks, is_open):
-    open_clicks = open_clicks or 0
-    close_clicks = close_clicks or 0
-
-    # Simple deterministic rule: open if opens > closes
-    return open_clicks > close_clicks
-
-
-@callback(
-    Output("modal-case-type-list", "children"),
-    Input("modal-category-select", "value"),
-)
-def update_case_type_list(selected_category):
-    if not selected_category:
-        return html.P(
-            "Select a category to view its case types.",
-            className="text-muted",
-        )
-
-    case_types = category_to_types.get(selected_category, [])
-    if not case_types:
-        return html.P(
-            "No case types found for this category.",
-            className="text-muted",
-        )
-
-    case_types_sorted = sorted(case_types)
-
-    return dbc.Card(
-        dbc.CardBody(
-            [
-                html.H6(
-                    f"Case Types under '{selected_category}':",
-                    className="text-info mb-3",
-                ),
-                html.Ul(
-                    [
-                        html.Li(
-                            ct,
-                            style={"color": "#FFF"},
-                        )
-                        for ct in case_types_sorted
-                    ]
-                ),
-                html.P(
-                    f"Total case types: {len(case_types_sorted)}",
-                    className="text-muted mt-3",
-                ),
-            ]
-        ),
-        className="bg-dark border-info",
+        f"{int(r['Total']):,}",
+        f"{r['MedianRes']:.0f}" if pd.notna(r['MedianRes']) else "—",
+        f"{r['SLA_Rate']:.1f}%" if pd.notna(r['SLA_Rate']) else "—",
+        f"{r['AvgPerMonth']:.0f}" if pd.notna(r['AvgPerMonth']) else "—",
     )
 
 
-# Callbacks – Slowest areas & SLA risk
+# SLOWEST AREAS
 @callback(
     Output("slow-content", "children"),
     Input("slow-tabs", "active_tab"),
     Input("summary-month-dropdown", "value"),
 )
-def update_slowest_panel(active_tab, selected_month):
-    filtered = df.copy()
-    if selected_month != "all":
-        filtered = filtered[filtered["MonthName"] == selected_month]
+def update_slowest(active_tab, month):
 
-    if active_tab == "slow-cat":
-        return build_slowest_table(filtered, "CATEGORY", min_count=30)
-    if active_tab == "slow-nbh":
-        return build_slowest_table(filtered, "NEIGHBORHOOD", min_count=20)
-    if active_tab == "slow-dept":
-        return build_slowest_table(filtered, "DEPARTMENT", min_count=20)
+    table_map = {
+        "slow-dept": SLOW_DEPT,
+        "slow-cat": SLOW_CAT,
+        "slow-nbh": SLOW_NBH,
+    }
 
-    return html.P("Invalid tab selected.", className="text-muted")
+    df = table_map[active_tab]
+    df = df[df["MonthName"] == month]
+
+    if df.empty:
+        return empty_table("No data available.")
+
+    df = df.sort_values("MedianDays", ascending=False)
+
+    return make_table(df.head(10))
 
 
+# SLA RISK
 @callback(
     Output("sla-content", "children"),
     Input("sla-tabs", "active_tab"),
     Input("summary-month-dropdown", "value"),
 )
-def update_sla_panel(active_tab, selected_month):
-    filtered = df.copy()
-    if selected_month != "all":
-        filtered = filtered[filtered["MonthName"] == selected_month]
+def update_sla_risk(active_tab, month):
 
-    if active_tab == "sla-dept":
-        return build_sla_risk_table(filtered, "DEPARTMENT")
-    if active_tab == "sla-cat":
-        return build_sla_risk_table(filtered, "CATEGORY")
-    if active_tab == "sla-nbh":
-        return build_sla_risk_table(filtered, "NEIGHBORHOOD")
+    table_map = {
+        "sla-dept": SLA_DEPT,
+        "sla-cat": SLA_CAT,
+        "sla-nbh": SLA_NBH,
+    }
 
-    return html.P("Invalid tab selected.", className="text-muted")
+    df = table_map[active_tab]
+    df = df[df["MonthName"] == month]
 
-# Callbacks – Volume treemap & trend
+    if df.empty:
+        return empty_table("No SLA data.")
+
+    df = df.sort_values("SLA_Percent")
+    df["SLA_Percent"] = df["SLA_Percent"].round(1)
+
+    df2 = df.rename(columns={"SLA_Percent": "SLA %", "CaseCount": "Cases"})
+
+    return make_table(df2.head(10))
+
+
+# VOLUME TREEMAP
 @callback(
     Output("volume-treemap", "figure"),
     Input("vol-tabs", "active_tab"),
     Input("summary-month-dropdown", "value"),
 )
-def update_volume_treemap(active_tab, selected_month):
-    # Safety check
-    if df.empty:
-        return px.treemap(title="No data available")
-
-    filtered = df.copy()
-
-    if selected_month != "all":
-        filtered = filtered[filtered["MonthName"] == selected_month]
+def update_volume_treemap(tab, month):
 
     group_map = {
         "vol-cat": "CATEGORY",
@@ -741,91 +572,80 @@ def update_volume_treemap(active_tab, selected_month):
         "vol-nbh": "NEIGHBORHOOD",
     }
 
-    group_col = group_map.get(active_tab, "CATEGORY")
+    col = group_map.get(tab)
+    df = VOLUME_COUNTS[(VOLUME_COUNTS["GroupColumn"] == col) & (VOLUME_COUNTS["MonthName"] == month)]
 
-    # Column missing → safe empty fig
-    if group_col not in filtered.columns:
-        return px.treemap(
-            pd.DataFrame({"Label": ["No data"], "Count": [1]}),
-            path=["Label"],
-            values="Count",
-            title="No data available",
-        )
-
-    # Build clean count df — NO rename collisions
-    count_df = (
-        filtered[group_col]
-        .dropna()
-        .value_counts()
-        .rename_axis(group_col)
-        .reset_index(name="Count")
-    )
-
-    if count_df.empty:
-        return px.treemap(
-            pd.DataFrame({"Label": ["No data"], "Count": [1]}),
-            path=["Label"],
-            values="Count",
-            title="No data available",
-        )
+    if df.empty:
+        return empty_figure("No data available")
 
     fig = px.treemap(
-        count_df,
-        path=[group_col],
-        values="Count",
-        color="Count",
-        color_continuous_scale="Plasma",
-        title=f"Volume by {group_col.title()}",
-    )
-
-    fig.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="#140327",
-        font_color="white",
-        margin=dict(t=40, l=0, r=0, b=0),
-    )
-
-    return fig
-
-@callback(
-    Output("volume-trend", "figure"),
-    Input("summary-month-dropdown", "value"),
-)
-def update_volume_trend(_selected_month):
-    if "CREATED DATE" not in df.columns or df["CREATED DATE"].dropna().empty:
-        return px.line(title="No data available")
-
-    filtered = df.copy()
-    filtered = filtered.assign(YearMonth=filtered["CREATED DATE"].dt.to_period("M"))
-
-    month_counts = (
-        filtered.groupby("YearMonth")
-        .size()
-        .reset_index(name="Count")
-        .sort_values("YearMonth")
-    )
-
-    if month_counts.empty:
-        return px.line(title="No data available")
-
-    last_12 = month_counts.tail(12)
-    last_12["YearMonth"] = last_12["YearMonth"].astype(str)
-
-    fig = px.line(
-        last_12,
-        x="YearMonth",
-        y="Count",
-        markers=True,
-        template="plotly_dark",
-        title="Complaint Volume — Last 12 Months",
+        df, path=["GroupValue"], values="Count",
+        color="Count", color_continuous_scale="Plasma"
     )
 
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         font_color="white",
-        xaxis_title="Month",
-        yaxis_title="Complaints",
+    )
+    return fig
+
+
+# VOLUME TREND
+@callback(
+    Output("volume-trend", "figure"),
+    Input("summary-month-dropdown", "value"),
+)
+def update_volume_trend(_month):
+
+    df = VOLUME_TREND.copy()
+    df["Month"] = pd.to_datetime(df["YearMonth"])
+
+    fig = px.line(
+        df, x="Month", y="Count",
+        markers=True, template="plotly_dark",
+        title="Complaint Volume — Last 12 Months"
+    )
+
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        height=420,
     )
 
     return fig
+
+
+# CASE TYPE MODAL
+@callback(
+    Output("modal-case-type-list", "children"),
+    Input("modal-category-select", "value"),
+)
+def update_case_type_list(category):
+    if not category:
+        return html.P("Select a category.", className="text-muted")
+
+    case_types = CATEGORY_TO_TYPES.get(category)
+    if not case_types:
+        return html.P("No case types found.", className="text-danger")
+
+    return dbc.Card(
+        dbc.CardBody([
+            html.H6(f"Case Types under '{category}':", className="text-info mb-3"),
+            html.Ul([html.Li(ct, style={"color": "#FFF"}) for ct in case_types]),
+            html.P(f"Total case types: {len(case_types)}", className="text-info mt-3"),
+        ]),
+        className="bg-dark border-primary",
+    )
+
+
+@callback(
+    Output("case-types-modal", "is_open"),
+    Input("open-case-modal", "n_clicks"),
+    Input("close-case-modal", "n_clicks"),
+    State("case-types-modal", "is_open"),
+)
+def toggle_case_type_modal(open_clicks, close_clicks, is_open):
+    if open_clicks or close_clicks:
+        return not is_open
+    return is_open

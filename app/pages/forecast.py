@@ -37,7 +37,19 @@ layout = dbc.Container([
             dbc.Label("Select Neighborhood(s):", className="text-white"),
             dcc.Dropdown(
                 id="neighborhood-select",
-                options=[{"label": n, "value": n} for n in sorted(df["NEIGHBORHOOD"].dropna().unique())],
+                options=[
+                    {"label": n, "value": n}
+                    for n in sorted(
+                        df["NEIGHBORHOOD"]
+                        .dropna()
+                        .astype(str)
+                        .str.replace(r"\s+", " ", regex=True)
+                        .str.replace("\u00a0", " ", regex=False)
+                        .str.strip()
+                        .str.title()
+                        .unique()
+                    )
+                ],
                 value=[],
                 multi=True,
                 clearable=True,
@@ -159,6 +171,13 @@ layout = dbc.Container([
             "width": "50%"
         }
     ),
+    
+    html.Div(
+        id="mape-description",
+        className="text-center text-info mx-5",
+        style={"fontSize": "14px"}
+    ),
+
 
     dbc.Row([dbc.Col(dbc.Button("🏠 Home", href="/", color="primary"), width="auto")], justify="center"),
 ])
@@ -189,7 +208,14 @@ def update_items_dropdown(selected_neighs, forecast_level):
     items = set()
 
     for neigh in selected_neighs:
-        df_sub = df if neigh == "CITYWIDE" else df[df["NEIGHBORHOOD"].str.strip() == neigh.strip()]
+        
+        clean_neigh = neigh.strip().title()
+
+        df_sub = (
+            df if neigh == "CITYWIDE"
+            else df[df["NEIGHBORHOOD"].astype(str).str.strip().str.title() == clean_neigh]
+        )
+
         items.update(df_sub[level_col].dropna().astype(str).str.strip().unique())
         
     if not items:
@@ -210,6 +236,7 @@ def update_items_dropdown(selected_neighs, forecast_level):
     Output("forecast-alert", "is_open"),
     Output("forecast-alert", "color"),
     Output("forecast-subtitle", "children"),
+    Output("mape-description", "children"),
     Input("neighborhood-select", "value"),
     Input("forecast-level", "value"),
     Input("item-select", "value"),
@@ -220,6 +247,14 @@ def update_forecasts(selected_neighs, forecast_level, selected_item, forecast_ty
 
     # Subtitle
     subtitle = f"Forecasting {forecast_level.title()} {forecast_type.title()} Trends"
+    
+    mape_description = (
+        "MAPE (Mean Absolute Percentage Error) reflects recent forecast accuracy. "
+        "Lower is better. "
+        "Reliable forecasts are within tolerance, "
+        "Possibly Unreliable forecasts may deviate, "
+        "and Unreliable forecasts should be used directionally only."
+    )
 
     # Normalize neighborhoods
     if not selected_neighs:
@@ -356,7 +391,7 @@ def update_forecasts(selected_neighs, forecast_level, selected_item, forecast_ty
             "No forecast rows available.",
             True,
             "warning",
-            subtitle
+            subtitle,
         )
 
     # BUILD TABLE
@@ -394,10 +429,42 @@ def update_forecasts(selected_neighs, forecast_level, selected_item, forecast_ty
     # ALERT MESSAGE
     alert_text = "\n".join(reliability_msgs)
     show_alert = True
-    alert_color = (
-        "danger" if "Unreliable" in alert_text else
-        "warning" if "Possibly" in alert_text else
-        "info"
-    )
+    if "Possibly Unreliable" in alert_text:
+        alert_color = "warning"
+    elif "Unreliable" in alert_text:
+        alert_color = "danger"
+    elif "Reliable" in alert_text:
+        alert_color = "info"
+    else:
+        alert_color = "secondary"
 
-    return fig, table_component, alert_text, show_alert, alert_color, subtitle
+    
+    # DETECT USELESS FORECASTS (all zeros)
+    if all_forecasts:
+        combined = pd.concat(all_forecasts, ignore_index=True)
+
+        # If yhat is all zeros → model has nothing to work with
+        yhat_col = "Predicted Severity" if forecast_type == "severity" else "Predicted Complaints"
+
+        if combined[yhat_col].sum() == 0:
+            return (
+                empty_figure("No usable forecast data available."),
+                html.Div(),
+                "Forecast contains only zeros — no meaningful pattern detected.",
+                True,
+                "warning",
+                subtitle
+            )
+
+    # NO FORECASTS?
+    if not all_forecasts:
+        return (
+            empty_figure("No forecast data available for this selection"),
+            dbc.Alert("No forecast rows available.", color="danger"),
+            "No forecast rows available.",
+            True,
+            "danger",
+            subtitle
+        )
+
+    return fig, table_component, alert_text, show_alert, alert_color, subtitle, mape_description

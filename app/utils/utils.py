@@ -1,7 +1,9 @@
 from dash import html
 import dash_bootstrap_components as dbc
+from dash import dash_table
 from collections import defaultdict
 from plotly import graph_objects as go
+import pandas as pd
 
 def navbar():
     return dbc.NavbarSimple(
@@ -11,7 +13,7 @@ def navbar():
             dbc.DropdownMenu(
                 children=[
                     dbc.NavItem(dbc.NavLink("Map", href="/map")),
-                    dbc.NavItem(dbc.NavLink("Complaints Trends", href="/complaint-trends")),
+                    dbc.NavItem(dbc.NavLink("Complaint Trends", href="/complaint-trends")),
                     dbc.NavItem(dbc.NavLink("Neighborhood Metrics", href="/neighborhood-metrics")),
                     dbc.NavItem(dbc.NavLink("Resolution Insights", href="/resolution-insights")),
                 ],
@@ -92,6 +94,53 @@ def make_table(df, col_rename=None):
         className="table-dark text-white",
         style={"tableLayout": "fixed"}
     )
+
+
+def make_sortable_table(df, col_rename=None):
+    """Return a sortable, styled table for any dataframe."""
+    if df.empty:
+        return dbc.Alert("No data available.", color="warning")
+
+    # Optional renaming
+    if col_rename:
+        df = df.rename(columns=col_rename)
+
+    return dash_table.DataTable(
+        id="dynamic-table",
+        columns=[{"name": col, "id": col} for col in df.columns],
+        data=df.to_dict("records"),
+
+        # Enable key interactive features
+        sort_action="native",
+        filter_action="native",
+        page_action="native",
+        page_size=20,
+
+        # Visual styling to match dark Bootstrap theme
+        style_table={
+            "overflowX": "auto",
+            "backgroundColor": "#212529",  # Bootstrap dark
+        },
+        style_header={
+            "backgroundColor": "var(--bs-primary)",
+            "color": "white",
+            "fontWeight": "bold",
+            "whiteSpace": "nowrap",
+        },
+        style_cell={
+            "backgroundColor": "#212529",
+            "color": "white",
+            "textAlign": "left",
+            "padding": "6px",
+        },
+        style_data_conditional=[
+            {
+                "if": {"row_index": "odd"},
+                "backgroundColor": "#2c3034",
+            }
+        ],
+    ) 
+    
     
 def empty_table(msg="No rows available"):
     return dbc.Alert(msg, color="warning", className="text-center")

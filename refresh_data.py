@@ -2,6 +2,7 @@ import os
 import io
 import pandas as pd
 import requests
+import time
 from collections import defaultdict
 from sqlalchemy import create_engine, text, Table, MetaData, insert
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -39,30 +40,51 @@ RENAME_MAP = {
 KEEP_COLS = list(RENAME_MAP.values()) + ["CATEGORY", "RESOLUTION_TIME_DAYS"]
 
 # HELPERS
-def download_file(url: str) -> pd.DataFrame:
+def download_file(url: str, max_retries=5) -> pd.DataFrame:
     print(f"Downloading: {url}")
     tmp_path = "tmp_311.txt"
     skip_lines = 5
 
-    # Stream download to avoid incomplete read errors
-    with requests.get(url, stream=True) as r:
-        r.raise_for_status()
-        with open(tmp_path, "wb") as f:
-            for chunk in r.iter_content(chunk_size=10_000_000):  # 10 MB chunks
-                f.write(chunk)
+    for attempt in range(1, max_retries + 1):
+        try:
+            # Stream download (with retry)
+            with requests.get(url, stream=True, timeout=60) as r:
+                r.raise_for_status()
 
-    # Read pipe-delimited text safely
+                with open(tmp_path, "wb") as f:
+                    for chunk in r.iter_content(chunk_size=10_000_000):  # 10 MB
+                        if chunk:
+                            f.write(chunk)
+
+            # If we reach here, download succeeded → break out of retry loop
+            break
+
+        except Exception as e:
+            print(f"⚠ Download attempt {attempt} failed: {e}")
+
+            # Last attempt → give up
+            if attempt == max_retries:
+                raise RuntimeError(
+                    f"Failed to download file after {max_retries} attempts\nURL: {url}"
+                )
+
+            time.sleep(3)  # wait before retrying
+            continue
+
+    # Parse pipe-delimited data safely
     df = pd.read_csv(
         tmp_path,
         sep="|",
         dtype=str,
         engine="python",
-        on_bad_lines='skip',
+        on_bad_lines="skip",
         skiprows=skip_lines,
-        encoding='latin-1'  
+        encoding="latin-1"
     )
+
     os.remove(tmp_path)
     return df
+
 
 def clean_and_prepare(df: pd.DataFrame) -> pd.DataFrame:
     # Rename columns

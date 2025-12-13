@@ -7,22 +7,47 @@ from app.utils.utils import make_table, category_to_types, empty_figure
 
 register_page(__name__, path="/neighborhood-metrics", title="Neighborhood Metrics")
 
-# Prepare data
-df["MonthName"] = df["CREATED DATE"].dt.month_name()
-
-month_options = [{"label": "All Months", "value": "all"}] + \
-                [{"label": m, "value": m} for m in df["MonthName"].unique()]
-
-neighborhood_options = [{"label": "All Neighborhoods", "value": "all"}] + \
-                       [{"label": n, "value": n} for n in sorted(
-                           df["NEIGHBORHOOD"]
-                           .dropna()
-                           .loc[lambda s: (s.str.strip() != "") & (s != "None")]
-                           .unique()
-                       )]
-
 
 metrics = ["DEPARTMENT", "DIVISION", "CATEGORY"]
+
+# LOAD PRECOMPUTED DATA
+BASE_PATH = "precomputed_data/metrics/"
+
+NEIGH_LIST = pd.read_parquet(BASE_PATH + "neighborhood_list.parquet").iloc[:, 0].tolist()
+MONTH_LIST = pd.read_parquet(BASE_PATH + "month_list.parquet").iloc[:, 0].tolist()
+
+BY_CATEGORY_NEIGH = pd.read_parquet(BASE_PATH + "by_category_neigh.parquet")
+BY_DEPT_NEIGH = pd.read_parquet(BASE_PATH + "by_department_neigh.parquet")
+BY_DIV_NEIGH = pd.read_parquet(BASE_PATH + "by_division_neigh.parquet")
+
+CATEGORY_TOTAL = pd.read_parquet(BASE_PATH + "by_category.parquet")
+DEPARTMENT_TOTAL = pd.read_parquet(BASE_PATH + "by_department.parquet")
+DIVISION_TOTAL = pd.read_parquet(BASE_PATH + "by_division.parquet")
+
+NEIGH_TOTAL = pd.read_parquet(BASE_PATH + "neighborhood_totals.parquet")
+
+
+# Metrics map → tells callback which parquet to use
+METRIC_TO_PARQUET = {
+    "CATEGORY": (BY_CATEGORY_NEIGH, CATEGORY_TOTAL),
+    "DEPARTMENT": (BY_DEPT_NEIGH, DEPARTMENT_TOTAL),
+    "DIVISION": (BY_DIV_NEIGH, DIVISION_TOTAL),
+}
+
+ALL_MONTH_MAP = {
+    "CATEGORY": pd.read_parquet(BASE_PATH + "by_category_neigh_allmonths.parquet"),
+    "DEPARTMENT": pd.read_parquet(BASE_PATH + "by_department_neigh_allmonths.parquet"),
+    "DIVISION": pd.read_parquet(BASE_PATH + "by_division_neigh_allmonths.parquet"),
+}
+
+month_options = [{"label": "All Months", "value": "all"}] + [
+    {"label": m, "value": m} for m in MONTH_LIST
+]
+
+neighborhood_options = [{"label": "All Neighborhoods", "value": "all"}] + [
+    {"label": n, "value": n} for n in NEIGH_LIST
+]
+
 
 layout = dbc.Container([
     html.H2("Neighborhood Metrics", className="text-center text-primary mb-4 mt-4"),
@@ -44,6 +69,7 @@ layout = dbc.Container([
             dbc.Select(
                 id="month-dropdown",
                 options=month_options,
+                value="all",
                 style={"width": "300px"}
             )
         ], width="auto")
@@ -196,96 +222,65 @@ layout = dbc.Container([
     Input("neighborhood-dropdown", "value")
 )
 def update_bar(selected_metric, selected_month, selected_neighborhood):
-    dff = df.copy()
-    
-    # Clean neighborhoods
-    dff = dff.dropna(subset=["NEIGHBORHOOD"])
-    dff = dff[dff["NEIGHBORHOOD"].str.strip() != ""]
-    dff = dff[dff["NEIGHBORHOOD"] != "None"]
 
-    # Filter month
-    if selected_month not in [None, "all"]:
-        dff = dff[dff["MonthName"] == selected_month]
+    # LOAD METRIC DATA
 
-    # GLOBAL EARLY EXIT — no data after filters
-    if dff.empty or selected_metric not in dff.columns:
+    neigh_df, metric_total_df = METRIC_TO_PARQUET[selected_metric]
+
+    # Filter by month
+    if selected_month != "all":
+        dff = neigh_df[neigh_df["MonthName"] == selected_month]
+    else:
+        all_month_df = ALL_MONTH_MAP[selected_metric]
+        dff = all_month_df.copy()
+
+    if dff.empty:
         fig = empty_figure("No data available")
-        empty_legend = html.Div("No legend", style={"color": "#FFF"})
-        empty_table_block = html.Div("No data available for the selected filters.", style={"color": "#FFF"})
-        empty_pie = empty_figure("No pie chart data")
-        return fig, empty_legend, empty_table_block, empty_pie
+        return fig, html.Div(), html.Div(), empty_figure("No pie data")
 
-    # Aggregate complaints
-    stacked_data = (
-        dff.groupby(["NEIGHBORHOOD", selected_metric])
-        .size()
-        .reset_index(name="Count")
-    )
+    # GET TOP 30 NEIGHBORHOODS (FOR CHART ONLY)
+    top_neigh = NEIGH_TOTAL["NEIGHBORHOOD"].head(30).tolist()
 
-    # LIMIT TO TOP 30 NEIGHBORHOODS
-    neighborhood_order = (
-        stacked_data.groupby("NEIGHBORHOOD")["Count"]
-        .sum()
-        .sort_values(ascending=False)
-        .index[:30]
+    # DO NOT inject selected neighborhood into bar chart
+    dff = dff[dff["NEIGHBORHOOD"].isin(top_neigh)]
+
+    # If user selects a neighborhood, make sure it remains in the chart
+    if selected_neighborhood != "all" and selected_neighborhood not in top_neigh:
+        top_neigh.append(selected_neighborhood)
+
+    dff = dff[dff["NEIGHBORHOOD"].isin(top_neigh)]
+
+    # TOP 10 METRIC ITEMS
+
+    top_metric_items = (
+        metric_total_df.sort_values("Count", ascending=False)
+        .head(10)[selected_metric]
         .tolist()
     )
 
-    stacked_data = stacked_data[stacked_data["NEIGHBORHOOD"].isin(neighborhood_order)]
+    dff = dff[dff[selected_metric].isin(top_metric_items)]
 
-    stacked_data["NEIGHBORHOOD"] = pd.Categorical(
-        stacked_data["NEIGHBORHOOD"],
-        categories=neighborhood_order,
-        ordered=True
-    )
-    
-    # LIMIT TO TOP 10 CATEGORIES
-    category_order = (
-        stacked_data.groupby(selected_metric)["Count"]
-        .sum()
-        .sort_values(ascending=False)
-        .index.tolist()
-    )
+    # COLOR MAP
 
-    top_categories = category_order[:10]
-
-    stacked_data = stacked_data[stacked_data[selected_metric].isin(top_categories)]
-
-    stacked_data[selected_metric] = pd.Categorical(
-        stacked_data[selected_metric],
-        categories=top_categories,
-        ordered=True
-    )
-
-    # Colors
     colors = px.colors.qualitative.Plotly
-    colors = (colors * ((len(top_categories) // len(colors)) + 1))[:len(top_categories)]
-    color_map = {cat: colors[i] for i, cat in enumerate(top_categories)}
-
-    # Build metric counts AFTER filtering
-    metric_counts = (
-        dff[dff["NEIGHBORHOOD"].isin(neighborhood_order)][selected_metric]
-        .value_counts()
-        .to_dict()
-    )
-    
-    # Filter down to only the top 10 categories
-    metric_counts = {cat: metric_counts.get(cat, 0) for cat in top_categories}
+    colors = (colors * ((len(top_metric_items) // len(colors)) + 1))[:len(top_metric_items)]
+    color_map = {cat: colors[i] for i, cat in enumerate(top_metric_items)}
 
     # STACKED BAR CHART
+
     fig = px.bar(
-        stacked_data,
+        dff,
         x="NEIGHBORHOOD",
         y="Count",
         color=selected_metric,
         color_discrete_map=color_map,
         barmode="stack",
         category_orders={
-            "NEIGHBORHOOD": neighborhood_order,
-            selected_metric: top_categories,
+            "NEIGHBORHOOD": top_neigh,
+            selected_metric: top_metric_items
         },
         height=640,
-        width=max(1500, len(neighborhood_order) * 50),
+        width=max(1500, len(top_neigh) * 50),
     )
 
     fig.update_layout(
@@ -294,122 +289,76 @@ def update_bar(selected_metric, selected_month, selected_neighborhood):
         plot_bgcolor="rgba(0,0,0,0)",
         font_color="#FFF",
         showlegend=False,
-        margin=dict(l=40, r=40, t=80, b=80)
+        margin=dict(l=40, r=40, t=80, b=80),
     )
 
-    # LEGEND 
+    # LEGEND
+
     legend_items = []
-    if selected_metric == "CATEGORY":
-        for cat in top_categories:
-            subtypes = category_to_types.get(cat, [])
-            legend_items.append(
-                html.Div([
-                    html.Div(
-                        f"{cat} ({metric_counts.get(cat, 0)})",
-                        style={
-                            "backgroundColor": color_map.get(cat, "#555"),
-                            "padding": "8px",
-                            "marginBottom": "4px",
-                            "color": "#FFF",
-                            "fontWeight": "bold"
-                        },
-                    ),
-                    html.Ul(
-                        [html.Li(sub, style={"color": "#DDD", "fontSize": "13px"}) for sub in sorted(subtypes)],
-                        style={
-                            "marginLeft": "16px",
-                            "marginTop": "2px",
-                            "marginBottom": "10px",
-                            "paddingLeft": "10px",
-                            "maxHeight": "150px",
-                            "overflowY": "auto",
-                            "borderLeft": "2px solid #333"
-                        }
-                    ) if subtypes else html.I("No subtypes", style={"color": "#AAA", "fontSize": "12px"})
-                ])
-            )
-    else:
-        legend_items = [
+    for cat in top_metric_items:
+        legend_items.append(
             html.Div(
-                f"{cat} ({metric_counts.get(cat, 0)})",
+                f"{cat}",
                 style={
-                    "backgroundColor": color_map.get(cat, "#555"),
                     "padding": "8px",
-                    "margin": "2px",
-                    "color": "#FFF"
+                    "backgroundColor": color_map[cat],
+                    "marginBottom": "4px",
+                    "color": "#FFF",
+                    "fontWeight": "bold"
                 }
             )
-            for cat in top_categories
-        ]
+        )
 
-    # TOP 10 TABLE
-    neighborhood_filter = dff.copy()
-    if selected_neighborhood and selected_neighborhood != "all":
-        neighborhood_filter = neighborhood_filter[neighborhood_filter["NEIGHBORHOOD"] == selected_neighborhood]
+    # PIE + TABLE SECTION
+    # Must NOT depend on top 30 filtering
+    raw_df = neigh_df.copy()
 
-    table_data = (
-        neighborhood_filter[selected_metric]
-        .value_counts()
+    # Apply month correctly
+    if selected_month != "all":
+        raw_df = raw_df[raw_df["MonthName"] == selected_month]
+
+    # Apply neighborhood filter
+    if selected_neighborhood != "all":
+        raw_df = raw_df[raw_df["NEIGHBORHOOD"] == selected_neighborhood]
+
+    # Aggregate by the selected metric
+    table_df = (
+        raw_df.groupby(selected_metric)["Count"]
+        .sum()
         .reset_index()
-        .rename(columns={"index": selected_metric, selected_metric: "Count"})
+        .sort_values("Count", ascending=False)
         .head(10)
     )
-    if table_data.empty:
-        table_block = html.Div(
-            f"No data available for {selected_neighborhood or 'selection'}.",
-            style={"color": "#FFF"}
+
+    # Build Table Component
+    if table_df.empty:
+        table_block = html.Div("No data", style={"color": "#FFF"})
+    else:
+        table_block = make_table(
+            table_df.rename(columns={
+                selected_metric: selected_metric.title(),
+                "Count": "Requests"
+            })
         )
+
+    # PIE CHART
+    if table_df.empty:
         pie_fig = empty_figure("No pie data")
     else:
-        if selected_metric == "CATEGORY":
-            metric_label = "Categories"
-        else:
-            metric_label = selected_metric.title() + "s"
-        table_block = html.Div([
-            html.H5(
-                f"Top 10 {metric_label} for "
-                f"{'All Neighborhoods' if selected_neighborhood == 'all' else selected_neighborhood}",
-                className="text-white mb-3"
-            ),
-            make_table(table_data, col_rename={selected_metric: selected_metric.title(), "Count": "Requests"})
-        ])
-        
-        # PIE CHART DATA
-        pie_df = dff.copy()
-
-        # Apply neighborhood filter
-        if selected_neighborhood != "all":
-            pie_df = pie_df[pie_df["NEIGHBORHOOD"] == selected_neighborhood]
-
-        # Count values
-        pie_counts = (
-            pie_df[selected_metric]
-            .value_counts(dropna=True)
-            .reset_index()
-        )
-
-        # VERY IMPORTANT: rename columns explicitly and safely
-        pie_counts.columns = [selected_metric, "Count"]
-
-        # Build pie chart
         pie_fig = px.pie(
-            pie_counts,
-            names=pie_counts.columns[0],   # same as selected_metric
+            table_df,
+            names=selected_metric,
             values="Count",
-        )
-        
-        pie_fig.update_traces(
-            hole=0.4,
-            textinfo="none"
+            color=selected_metric,
+            color_discrete_map=color_map
         )
 
-        # Style
+        pie_fig.update_traces(hole=0.4, textinfo="none")
         pie_fig.update_layout(
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
             font_color="#FFF",
-            title_font_size=20,
-            showlegend=False 
+            showlegend=False,
         )
 
     return fig, legend_items, table_block, pie_fig

@@ -222,3 +222,4 @@ Pre2021/
 .venv/
 .idea/
 .DS_Store
+/precomputed_data/

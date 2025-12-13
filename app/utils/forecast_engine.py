@@ -1,48 +1,79 @@
 import pandas as pd
 from prophet import Prophet
-from sklearn.metrics import mean_absolute_percentage_error
 from app.utils.data_loader import df
 
-df_local = df.copy()
-
-df_local["year_month"] = df_local["CREATED DATE"].dt.to_period("M")
-
-monthly_counts_citywide = (
-    df_local.groupby("year_month")
-            .size()
-            .reset_index(name="total_y")
-)
-
-VALID_CITYWIDE_MONTHS = set(
-    monthly_counts_citywide.loc[
-        monthly_counts_citywide["total_y"] >= 1000, 
-        "year_month"
-    ].tolist()
-)
-
-# Constants
+# CONFIG
 FORECAST_CONFIG = {
     "volume": {
         "min_months": 12,
         "max_mape": 50,
         "horizon_months": 12,
-        "trend_window": 3
+        "trend_window": 3,
     },
-
     "severity": {
         "min_months": 6,
         "max_mape": 70,
         "horizon_months": 6,
-        "trend_window": 2
-    }
+        "trend_window": 2,
+    },
 }
 
-# Helper Functions
+BASE = "precomputed_data/forecast/"
+
+# Helper: ensure ds is datetime
+def _ensure_month_end(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    if "ds" in df.columns:
+        df["ds"] = pd.to_datetime(df["ds"])
+    return df
+
+# VOLUME INPUTS
+VOLUME_FULL = pd.read_parquet(BASE + "monthly_volume_full.parquet")
+
+VALID_CITYWIDE_MONTHS = (
+    pd.read_parquet(BASE + "valid_citywide_months.parquet")["YearMonth"]
+    .astype(str)
+    .tolist()
+)
+
+# SEVERITY INPUTS (preloaded once)
+SEV_CITY = _ensure_month_end(
+    pd.read_parquet(BASE + "monthly_severity_citywide.parquet")
+)
+
+SEV_NEIGH = _ensure_month_end(
+    pd.read_parquet(BASE + "monthly_severity_neighborhood.parquet")
+)
+
+SEV_DEPT = _ensure_month_end(
+    pd.read_parquet(BASE + "monthly_severity_department.parquet")
+)
+
+SEV_DIV = _ensure_month_end(
+    pd.read_parquet(BASE + "monthly_severity_division.parquet")
+)
+
+SEV_CAT = _ensure_month_end(
+    pd.read_parquet(BASE + "monthly_severity_category.parquet")
+)
+
+SEVERITY_MAP = {
+    "citywide": SEV_CITY,
+    "neighborhood": SEV_NEIGH,
+    "department": SEV_DEPT,
+    "division": SEV_DIV,
+    "category": SEV_CAT,
+}
+
+# HELPERS
+
 def new_prophet():
     return Prophet(interval_width=0.95, yearly_seasonality=True)
 
+
 def rolling_trend(series, window=3):
     return series.rolling(window=window, min_periods=1, center=True).mean()
+
 
 def classify_reliability(mape, max_mape):
     if mape is None:
@@ -53,15 +84,29 @@ def classify_reliability(mape, max_mape):
         return "Possibly Unreliable"
     return "Unreliable"
 
+def month_closure_rate(df, month_end):
+    """
+    month_end: a Timestamp like 2025-09-30 (end-of-month date)
+    Returns float in [0,1] or None if no cases exist.
+    """
+    start = month_end.replace(day=1)
+    end = month_end
+
+    subset = df[(df["CREATED DATE"] >= start) & (df["CREATED DATE"] <= end)]
+
+    if subset.empty:
+        return None
+
+    closed = subset["CLOSED DATE"].notna().sum()
+    total = len(subset)
+
+    return closed / total
+
 def compute_recent_mape(merged, years=3):
-    """
-    Compute MAPE on the last N years of overlapping y & yhat data.
-    """
     if merged.empty or "y" not in merged or "yhat" not in merged:
         return None
 
     cutoff = merged["ds"].max() - pd.DateOffset(years=years)
-
     recent = merged[merged["ds"] >= cutoff].copy()
     recent = recent.dropna(subset=["y", "yhat"])
     recent = recent[recent["y"] > 0]
@@ -72,7 +117,7 @@ def compute_recent_mape(merged, years=3):
     mape = (abs(recent["y"] - recent["yhat"]) / recent["y"]).mean() * 100
     return mape
 
-# Forecast Functions
+
 def compute_forecast(ts, config, horizon=None):
     horizon = horizon or config["horizon_months"]
     min_months = config.get("min_months", 12)
@@ -81,7 +126,7 @@ def compute_forecast(ts, config, horizon=None):
 
     ts = ts.sort_values("ds")
 
-    # Drop last incomplete month
+    # Drop last month as "possibly incomplete"
     if len(ts) > 0:
         last_month = ts["ds"].max()
         ts = ts[ts["ds"] < last_month]
@@ -94,7 +139,7 @@ def compute_forecast(ts, config, horizon=None):
         ts["yhat_upper"] = ts["y"]
         ts["Rolling_Trend"] = rolling_trend(ts["y"], window=trend_window)
         ts["Rolling_%_Change"] = ts["y"].pct_change().fillna(0) * 100
-        fc = ts.copy()  # return a forecast dataframe with the same structure
+        fc = ts.copy()
         reliable = "Unreliable"
         mape = None
         return ts, fc, reliable, mape
@@ -110,218 +155,253 @@ def compute_forecast(ts, config, horizon=None):
     # Merge historical + predictions
     merged = pd.merge(ts, fc, on="ds", how="outer").sort_values("ds")
 
-    # Unified Rolling Trend and % Change
+    # Rolling trend + % change on combined series
     merged["Rolling_Trend"] = rolling_trend(
-        merged["y"].fillna(merged["yhat"]),  # fallback to forecast for future rows
-        window=trend_window
+        merged["y"].fillna(merged["yhat"]),
+        window=trend_window,
     )
-
     merged["Rolling_%_Change"] = (
         merged["y"].fillna(merged["yhat"]).pct_change().fillna(0) * 100
     )
 
-    # Historical MAPE
+    # Recent MAPE
     valid = merged.dropna(subset=["y", "yhat"])
     valid = valid[valid["y"] > 0]
-
     if len(valid) > 0:
         mape = compute_recent_mape(merged, years=3)
     else:
         mape = None
-        
+
     reliable = classify_reliability(mape, max_mape)
 
-    # Monthly bias (error pattern)
-    merged["error"] = merged["y"] - merged["yhat"]
-    merged["month"] = merged["ds"].dt.month
-
-    hist = merged[merged["y"].notna()].copy()
-    fc_only = merged[merged["y"].isna()].copy()
+    # Split into hist vs future
+    last_actual = ts["ds"].max()
+    hist = merged[merged["ds"] <= last_actual].copy()
+    fc_only = merged[merged["ds"] > last_actual].copy()
 
     return hist, fc_only, reliable, mape
 
 
+# PUBLIC API: VOLUME FORECAST
 def get_forecast(neigh, item, level, config, horizon=None):
+    """
+    Volume forecasts based only on monthly_volume_full parquet.
+    Returns (hist, forecast_only, reliability_text, mape)
+    """
 
-    local = df.copy()
-
-    # Column mapping
     level_col = {
         "category": "CATEGORY",
         "department": "DEPARTMENT",
-        "division": "DIVISION"
+        "division": "DIVISION",
     }.get(level.lower(), "CATEGORY")
 
-    # CITYWIDE uses month filter — neighborhoods should NOT
-    if neigh == "CITYWIDE":
-        df_filtered = local[local["CREATED DATE"].dt.to_period("M").isin(VALID_CITYWIDE_MONTHS)]
-        ts = df_filtered.copy()
+    dff = VOLUME_FULL.copy()
+
+    # Neighborhood filter
+    if neigh != "CITYWIDE":
+        value = str(neigh).strip().title()
+        dff = dff[dff["NEIGHBORHOOD"] == value]
     else:
-        ts = local[local["NEIGHBORHOOD"].str.strip() == neigh.strip()].copy()
+        dff = dff[dff["YearMonthStr"].isin(VALID_CITYWIDE_MONTHS)]
 
-    # Apply item filter
     if item != "ALL":
-        ts = ts[ts[level_col].astype(str).str.strip() == str(item).strip()]
+        value = str(item).strip()
+        dff = dff[dff[level_col] == value]
 
-    # Monthly aggregation
-    ts_grouped = (
-        ts.groupby(pd.Grouper(key="CREATED DATE", freq="ME"))
-          .size()
-          .reset_index(name="y")
-          .rename(columns={"CREATED DATE": "ds"})
+    if dff.empty:
+        # Return empty structures with same columns expected downstream
+        empty_cols = ["ds", "y", "yhat", "yhat_lower", "yhat_upper", "Rolling_Trend", "Rolling_%_Change"]
+        empty_hist = pd.DataFrame(columns=empty_cols)
+        empty_fc = pd.DataFrame(columns=empty_cols)
+        return empty_hist, empty_fc, "Unreliable", None
+
+    # Aggregate to a single y series per month
+    ts = (
+        dff
+        .groupby("ds")["Count"]
+        .sum()
+        .reset_index()
+        .rename(columns={"Count": "y"})
+        .sort_values("ds")
     )
 
-    if ts_grouped.empty:
-        return (
-            pd.DataFrame(columns=["ds","y","yhat","yhat_lower","yhat_upper","Rolling_Trend","Rolling_%_Change"]),
-            pd.DataFrame(),
-            "Unreliable",
-            None
-        )
-
-    # Fix month range (ensure continuous months)
-    full_range = pd.date_range(ts_grouped["ds"].min(), ts_grouped["ds"].max(), freq="ME")
-    ts_grouped = (
-        ts_grouped.set_index("ds")
-                  .reindex(full_range)
-                  .rename_axis("ds")
-                  .reset_index()
-                  .sort_values("ds") 
+    # Ensure continuous months (missing months → 0 complaints)
+    full_range = pd.date_range(ts["ds"].min(), ts["ds"].max(), freq="ME")
+    ts = (
+        ts.set_index("ds")
+        .reindex(full_range, fill_value=0)
+        .rename_axis("ds")
+        .reset_index()
     )
-    ts_grouped["y"] = ts_grouped["y"].interpolate().bfill().ffill()
 
-    # Call forecast engine
-    hist, fc, reliable, mape = compute_forecast(ts_grouped, config, horizon=horizon)
+    hist, fc_only, reliable, mape = compute_forecast(ts, config, horizon=horizon)
 
-    reliability_text = classify_reliability(mape, config["max_mape"])
+    return hist, fc_only, reliable, mape
 
-    return hist, fc, reliability_text, mape
 
 def get_severity_forecast(neigh, item, level, config, horizon=None):
-    local = df.copy()
+    """
+    Simple, stable severity forecast.
 
-    # Column mapping
-    level_col = {
-        "category": "CATEGORY",
-        "department": "DEPARTMENT",
-        "division": "DIVISION"
-    }.get(level.lower(), "CATEGORY")
+    - Uses precomputed monthly severity tables (no parquet reads per call)
+    - No regressors
+    - Horizon starts at the current calendar month
+    - "ALL" items forecast is ALWAYS based on citywide severity,
+      regardless of level or neighborhood selection
+    - Incomplete months trimmed using closure completeness
+    """
 
-    # Cap extreme severity outliers
-    cap = local["RESOLUTION_TIME_DAYS"].quantile(0.95)
-    local["RESOLUTION_TIME_DAYS"] = local["RESOLUTION_TIME_DAYS"].clip(upper=cap)
+    # Helpers
+    def _norm(series: pd.Series) -> pd.Series:
+        return (
+            series.astype(str)
+            .str.replace("\u00a0", " ")
+            .str.replace(r"\s+", " ", regex=True)
+            .str.strip()
+            .str.title()
+        )
 
-    # Remove last 2 months for modeling stability
-    latest_date = local["CREATED DATE"].max()
-    latest_month_start = latest_date.replace(day=1)
-    cutoff = latest_month_start - pd.DateOffset(months=1)
-    ts = local[local["CREATED DATE"] < cutoff].copy()
+    level_key = level.lower()
+    filter_col = level_key.upper()  # "CATEGORY" / "DEPARTMENT" / "DIVISION" / "NEIGHBORHOOD" / "CITYWIDE"
 
-    # Apply neighborhood & item filters
-    if neigh != "CITYWIDE":
-        ts = ts[ts["NEIGHBORHOOD"] == neigh]
+    if level_key not in SEVERITY_MAP:
+        # Failsafe
+        cols = ["ds", "y", "yhat", "yhat_lower", "yhat_upper",
+                "Rolling_Trend", "Rolling_%_Change"]
+        empty = pd.DataFrame(columns=cols)
+        return empty, empty.copy(), "Unreliable", None
 
-    if item != "ALL":
-        ts = ts[ts[level_col].astype(str).str.strip() == str(item).strip()]
+    # Base severity table for this level
+    severity = SEVERITY_MAP[level_key].copy()
 
-    if ts.empty:
-        return None, None, "No data after filtering", None
+    # Normalize user choices
+    neigh_norm = _norm(pd.Series([neigh])).iloc[0]
+    item_norm = None if item == "ALL" else _norm(pd.Series([item])).iloc[0]
 
-    # Impute missing severity by case-type median
-    medians_by_type = ts.groupby("CASE TYPE")["RESOLUTION_TIME_DAYS"].median()
-    ts["RESOLUTION_TIME_DAYS"] = ts.apply(
-        lambda r: medians_by_type[r["CASE TYPE"]] if pd.isna(r["RESOLUTION_TIME_DAYS"]) else r["RESOLUTION_TIME_DAYS"],
-        axis=1
+    # ALL items: always use CITYWIDE series (fully consistent)
+    if item == "ALL":
+        severity = SEV_CITY[["ds", "Severity"]].copy()
+        item_norm = None  # ensure no downstream filtering by item
+        # We also ignore neighborhood for ALL-items forecast.
+    else:
+        # Neighborhood filtering (only when not CITYWIDE and level supports it)
+        if neigh != "CITYWIDE" and "NEIGHBORHOOD" in severity.columns:
+            sev_neigh_clean = _norm(severity["NEIGHBORHOOD"])
+            severity = severity[sev_neigh_clean == neigh_norm]
+
+        # Item filtering for specific category/department/division/etc.
+        if filter_col in severity.columns and item_norm is not None:
+            sev_item_clean = _norm(severity[filter_col])
+            severity = severity[sev_item_clean == item_norm]
+
+    # Empty? → bail out cleanly
+    if severity.empty:
+        cols = ["ds", "y", "yhat", "yhat_lower", "yhat_upper",
+                "Rolling_Trend", "Rolling_%_Change"]
+        empty = pd.DataFrame(columns=cols)
+        return empty, empty.copy(), "Unreliable", None
+
+    # Build continuous monthly time series
+    ts = severity[["ds", "Severity"]].rename(columns={"Severity": "y"}).sort_values("ds")
+
+    full_range = pd.date_range(ts["ds"].min(), ts["ds"].max(), freq="ME")
+    ts = (
+        ts.set_index("ds")
+          .reindex(full_range)
+          .rename_axis("ds")
+          .reset_index()
     )
+    ts["y"] = ts["y"].interpolate().bfill().ffill()
 
-    # Monthly severity aggregation
-    ts_grouped = (
-        ts.groupby(pd.Grouper(key="CREATED DATE", freq="ME"))["RESOLUTION_TIME_DAYS"]
-        .mean()
-        .reset_index()
-        .rename(columns={"CREATED DATE": "ds", "RESOLUTION_TIME_DAYS": "y"})
-    )
+    # Remove incomplete last months via closure completeness
+    if len(severity) >= 2:
+        original_months = severity["ds"].sort_values().unique()
+        last_month = original_months[-1]
+        second_last_month = original_months[-2]
 
-    # Monthly regressors
-    monthly_volume = (
-        ts.groupby(pd.Grouper(key="CREATED DATE", freq="ME"))
-          .size()
-          .reset_index(name="case_volume")
-          .rename(columns={"CREATED DATE": "ds"})
-    )
+        # Match closure completeness to forecast target
+        df_subset = df.copy()
 
-    # Case-type dominance regressor
-    ct_monthly = (
-        ts.groupby([pd.Grouper(key="CREATED DATE", freq="ME"), "CASE TYPE"])
-        .size()
-        .reset_index(name="count")
-    )
-    totals = ct_monthly.groupby("CREATED DATE")["count"].sum()
-    ct_monthly["prop"] = ct_monthly.apply(
-        lambda r: r["count"] / totals[r["CREATED DATE"]],
-        axis=1
-    )
+        # For ALL items → use full citywide closure rate (no neighborhood / level filters)
+        if item != "ALL":
+            if neigh != "CITYWIDE" and "NEIGHBORHOOD" in df_subset.columns:
+                df_subset = df_subset[_norm(df_subset["NEIGHBORHOOD"]) == neigh_norm]
 
-    dominant_prop = (
-        ct_monthly.sort_values(["CREATED DATE", "prop"], ascending=[True, False])
-        .groupby("CREATED DATE").first()[["prop"]]
-        .reset_index()
-        .rename(columns={"CREATED DATE": "ds", "prop": "dominant_case_prop"})
-    )
+            if filter_col in df_subset.columns and item_norm is not None:
+                df_subset = df_subset[_norm(df_subset[filter_col]) == item_norm]
 
-    # Merge regressors
-    ts_grouped = (
-        ts_grouped
-        .merge(monthly_volume, on="ds", how="left")
-        .merge(dominant_prop, on="ds", how="left")
-    )
+        rate = month_closure_rate(df_subset, second_last_month)
 
-    # Build full timeline and interpolate missing
-    full_range = pd.date_range(ts_grouped["ds"].min(), ts_grouped["ds"].max(), freq="ME")
-    ts_grouped = ts_grouped.set_index("ds").reindex(full_range).rename_axis("ds").reset_index()
-    for col in ["y", "case_volume", "dominant_case_prop"]:
-        ts_grouped[col] = ts_grouped[col].interpolate().bfill().ffill()
+        if rate is not None and rate >= 0.90:
+            # Second-last month is solid → drop only the very last month
+            ts = ts[ts["ds"] < last_month]
+        else:
+            # Second-last is also incomplete → drop both last and second-last
+            ts = ts[ts["ds"] < second_last_month]
 
-    # Train full model on history
-    model = Prophet(yearly_seasonality=True, changepoint_prior_scale=0.8)
-    model.add_regressor("case_volume")
-    model.add_regressor("dominant_case_prop")
-    model.fit(ts_grouped)
+    # Fallback if not enough history
+    if len(ts) < config["min_months"]:
+        ts["yhat"] = ts["y"]
+        ts["yhat_lower"] = ts["y"]
+        ts["yhat_upper"] = ts["y"]
+        ts["Rolling_Trend"] = rolling_trend(ts["y"], window=config["trend_window"])
+        ts["Rolling_%_Change"] = ts["y"].pct_change().fillna(0) * 100
+        return ts, ts.copy(), "Unreliable", None
 
-    # Build future dataframe
-    horizon = horizon or config.get("horizon_months", 12)
+    # Fit Prophet (no regressors)
+    model = Prophet(yearly_seasonality=True)
+    model.fit(ts)
+
+    # Forecast starting at CURRENT MONTH
+    horizon = horizon or config["horizon_months"]
+    today_month = pd.Timestamp.today().to_period("M").to_timestamp()
+
     future = model.make_future_dataframe(periods=horizon, freq="ME")
-    future = future.merge(ts_grouped[["ds", "case_volume", "dominant_case_prop"]], on="ds", how="left")
+    fc = model.predict(future)
 
-    # FFill regressor values for future months
-    future["case_volume"] = future["case_volume"].ffill()
-    future["dominant_case_prop"] = future["dominant_case_prop"].ffill()
+    merged = pd.merge(
+        fc[["ds", "yhat", "yhat_lower", "yhat_upper"]],
+        ts[["ds", "y"]],
+        on="ds",
+        how="left",
+    )
 
-    # Predict
-    forecast = model.predict(future)[["ds", "yhat", "yhat_lower", "yhat_upper"]]
+    base = merged["y"].fillna(merged["yhat"])
+    merged["Rolling_Trend"] = rolling_trend(base, window=config["trend_window"])
+    merged["Rolling_%_Change"] = base.pct_change().fillna(0) * 100
 
-    # Merge real history + predictions
-    merged = pd.merge(ts_grouped, forecast, on="ds", how="outer").sort_values("ds")
+    # Historical part = everything up to last observed month
+    hist_cutoff = ts["ds"].max()
+    hist = merged[merged["ds"] <= hist_cutoff]
 
-    # Compute MAPE only on last 3 years of overlap
-    recent_cutoff = merged["ds"].max() - pd.DateOffset(years=3)
-    valid = merged[(merged["ds"] >= recent_cutoff) & merged["y"].notna() & merged["yhat"].notna() & (merged["y"] > 0)]
+    # Future part = from current calendar month onward
+    future_df = merged[merged["ds"] >= today_month].copy()
+    future_df = future_df.head(horizon)
 
-    mape = None if valid.empty else (abs(valid["y"] - valid["yhat"]) / valid["y"]).mean() * 100
+    # If Prophet didn't give enough rows, extend flat
+    if len(future_df) < horizon:
+        missing = horizon - len(future_df)
+        last_row = future_df.iloc[-1] if not future_df.empty else None
+
+        extra_months = pd.date_range(
+            start=future_df["ds"].max() + pd.offsets.MonthEnd(1)
+            if not future_df.empty else today_month,
+            periods=missing,
+            freq="ME",
+        )
+
+        for m in extra_months:
+            future_df.loc[len(future_df)] = {
+                "ds": m,
+                "yhat": last_row["yhat"] if last_row is not None else ts["y"].iloc[-1],
+                "yhat_lower": last_row["yhat_lower"] if last_row is not None else ts["y"].iloc[-1],
+                "yhat_upper": last_row["yhat_upper"] if last_row is not None else ts["y"].iloc[-1],
+                "Rolling_Trend": last_row["Rolling_Trend"] if last_row is not None else ts["y"].iloc[-1],
+                "Rolling_%_Change": 0,
+            }
+
+    # Reliability via recent MAPE
+    mape = compute_recent_mape(merged)
     reliability = classify_reliability(mape, config["max_mape"])
 
-    # Rolling metrics (needed for dashboard table)
-    trend_window = config["trend_window"]
-    merged["Rolling_Trend"] = rolling_trend(
-        merged["y"].fillna(merged["yhat"]), 
-        window=trend_window
-    )
-    merged["Rolling_%_Change"] = merged["y"].fillna(merged["yhat"]).pct_change() * 100
-
-    # Split into: history vs future (MUST MATCH volume forecast behavior)
-    last_actual = ts_grouped["ds"].max()
-
-    hist = merged[merged["ds"] <= last_actual].copy()
-    fc_only = merged[merged["ds"] > last_actual].copy()
-
-    return hist, fc_only, reliability, mape
+    return hist, future_df, reliability, mape
