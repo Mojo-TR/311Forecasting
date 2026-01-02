@@ -15,26 +15,49 @@ def prepare_base(df_in):
 
 # MONTHLY VOLUME BASE
 def compute_monthly_volume(df2):
+    df2 = df2.copy()
+
+    latest = df2["ds"].max()
+    cutoff = (latest.to_period("M") - 1).to_timestamp("M")
+    df2 = df2[df2["ds"] < cutoff]
 
     rows = []
+    aggregations = [
+        ([], "citywide"),
 
-    for neigh, group in df2.groupby(df2["NEIGHBORHOOD"].fillna("CITYWIDE")):
+        # CITYWIDE item-level
+        (["DEPARTMENT"], "department"),
+        (["DIVISION"], "division"),
+        (["CATEGORY"], "category"),
+
+        # Neighborhood-level
+        (["NEIGHBORHOOD"], "neighborhood"),
+        (["NEIGHBORHOOD", "DEPARTMENT"], "neighborhood_department"),
+        (["NEIGHBORHOOD", "DIVISION"], "neighborhood_division"),
+        (["NEIGHBORHOOD", "CATEGORY"], "neighborhood_category"),
+    ]
+
+
+    for group_cols, level in aggregations:
         temp = (
-            group
-            .groupby("ds")
+            df2.groupby(["ds"] + group_cols)
             .size()
             .reset_index(name="Count")
         )
-        temp["NEIGHBORHOOD"] = neigh
+
+        for col in ["NEIGHBORHOOD", "DEPARTMENT", "DIVISION", "CATEGORY"]:
+            if col not in temp.columns:
+                temp[col] = "ALL"
+
+        if level in ["citywide", "department", "division", "category"]:
+            temp["NEIGHBORHOOD"] = "CITYWIDE"
+
+        temp["LEVEL"] = level
         rows.append(temp)
 
     out = pd.concat(rows, ignore_index=True)
-
-    # To support citywide correctness:
-    out["YearMonthStr"] = out["ds"].dt.strftime("%Y-%m")
-
     out.to_parquet(OUTPUT / "monthly_volume_full.parquet", index=False)
-    print("✓ monthly_volume_full.parquet created:", len(out))
+
 
 
 # VALID CITYWIDE MONTHS
@@ -80,7 +103,7 @@ def compute_severity(df2):
     # 4. Drop remaining NaNs
     df2 = df2.dropna(subset=["RESOLUTION"])
 
-    # ---- AGGREGATIONS ----
+    # AGGREGATIONS
 
     # CITYWIDE
     city = (
@@ -121,6 +144,40 @@ def compute_severity(df2):
         .reset_index(name="Severity")
     )
     cat.to_parquet(OUTPUT / "monthly_severity_category.parquet", index=False)
+    
+    # NEIGHBORHOOD × DEPARTMENT
+    neigh_dept = (
+        df2.groupby(["ds", "NEIGHBORHOOD", "DEPARTMENT"])["RESOLUTION"]
+        .mean()
+        .reset_index(name="Severity")
+    )
+    neigh_dept.to_parquet(
+        OUTPUT / "monthly_severity_neighborhood_department.parquet",
+        index=False
+    )
+
+    # NEIGHBORHOOD × DIVISION
+    neigh_div = (
+        df2.groupby(["ds", "NEIGHBORHOOD", "DIVISION"])["RESOLUTION"]
+        .mean()
+        .reset_index(name="Severity")
+    )
+    neigh_div.to_parquet(
+        OUTPUT / "monthly_severity_neighborhood_division.parquet",
+        index=False
+    )
+    
+    # NEIGHBORHOOD × CATEGORY
+    neigh_cat = (
+        df2.groupby(["ds", "NEIGHBORHOOD", "CATEGORY"])["RESOLUTION"]
+        .mean()
+        .reset_index(name="Severity")
+    )
+    neigh_cat.to_parquet(
+        OUTPUT / "monthly_severity_neighborhood_category.parquet",
+        index=False
+    )
+
 
     print("✓ Severity precompute matches notebook")
 

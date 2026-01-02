@@ -5,6 +5,11 @@ from app.utils.data_loader import df
 OUTPUT = Path("precomputed_data/resolution")
 OUTPUT.mkdir(parents=True, exist_ok=True)
 
+GROUP_LEVELS = {
+    "neighborhood": "NEIGHBORHOOD",
+    "department": "DEPARTMENT",
+    "category": "CATEGORY",
+}
 
 # BASE CLEANING
 def prepare_base(df_in):
@@ -22,28 +27,36 @@ def prepare_base(df_in):
 
 
 # PER-MONTH PER-NEIGHBORHOOD STATS
-def compute_resolution_stats(df2):
+def compute_resolution_stats(df2, level, group_col):
     stats = (
-        df2.groupby(["NEIGHBORHOOD", "MonthName"])["RESOLUTION_TIME_DAYS"]
+        df2.groupby([group_col, "MonthName"])["RESOLUTION_TIME_DAYS"]
         .agg(["mean", "median", "max", "count"])
         .reset_index()
         .rename(columns={
+            group_col: "Group",
             "mean": "Avg_Resolution",
             "median": "Median_Resolution",
             "max": "Max_Resolution",
             "count": "Volume"
         })
     )
-    stats.to_parquet(OUTPUT / "resolution_stats.parquet", index=False)
+
+    stats["Level"] = level
+
+    stats.to_parquet(
+        OUTPUT / f"resolution_stats_{level}.parquet",
+        index=False
+    )
 
 
 # ALL-MONTH AGGREGATE STATS (important!)
-def compute_resolution_stats_all_months(df2):
-    all_months = (
-        df2.groupby("NEIGHBORHOOD")["RESOLUTION_TIME_DAYS"]
+def compute_resolution_stats_all_months(df2, level, group_col):
+    stats = (
+        df2.groupby(group_col)["RESOLUTION_TIME_DAYS"]
         .agg(["mean", "median", "max", "count"])
         .reset_index()
         .rename(columns={
+            group_col: "Group",
             "mean": "Avg_Resolution",
             "median": "Median_Resolution",
             "max": "Max_Resolution",
@@ -51,7 +64,13 @@ def compute_resolution_stats_all_months(df2):
         })
         .sort_values("Avg_Resolution")
     )
-    all_months.to_parquet(OUTPUT / "resolution_stats_all_months.parquet", index=False)
+
+    stats["Level"] = level
+
+    stats.to_parquet(
+        OUTPUT / f"resolution_stats_all_months_{level}.parquet",
+        index=False
+    )
 
 
 # CITYWIDE KPI VALUES (per month + overall)
@@ -124,22 +143,23 @@ def compute_fastest_slowest(df2):
 
 # SLA BUCKETS + HEATMAP MATRIX
 
-def compute_sla_buckets_and_heatmap(df2):
+def compute_sla_heatmap(df2, level, group_col):
     df2 = df2.copy()
-    df2["MonthName"] = df2["CREATED DATE"].dt.month_name()
-
     df2["WithinSLA"] = df2["RESOLUTION_TIME_DAYS"] <= 3
 
-    sla_matrix = (
-        df2.groupby(["NEIGHBORHOOD", "MonthName"])["WithinSLA"]
+    heatmap = (
+        df2.groupby([group_col, "MonthName"])["WithinSLA"]
         .mean()
         .reset_index()
-        .pivot(index="NEIGHBORHOOD", columns="MonthName", values="WithinSLA")
+        .pivot(index=group_col, columns="MonthName", values="WithinSLA")
         * 100
     )
 
-    sla_matrix = sla_matrix.fillna(0)
-    sla_matrix.to_parquet(OUTPUT / "sla_heatmap_matrix.parquet")
+    heatmap = heatmap.fillna(0)
+
+    heatmap.to_parquet(
+        OUTPUT / f"sla_heatmap_{level}.parquet"
+    )
 
 
 # RESOLUTION TREND OVER TIME
@@ -171,15 +191,17 @@ def run_precompute_resolution():
     df2 = prepare_base(df)
 
     compute_lists(df2)
-    compute_resolution_stats(df2)
-    compute_resolution_stats_all_months(df2)
     compute_citywide_kpis(df2)
     compute_fastest_slowest(df2)
-    compute_sla_buckets_and_heatmap(df2)
     compute_resolution_trend(df2)
 
-    print("✅ Completed: Resolution Insights Precompute")
+    for level, col in GROUP_LEVELS.items():
+        compute_resolution_stats(df2, level, col)
+        compute_resolution_stats_all_months(df2, level, col)
+        compute_sla_heatmap(df2, level, col)
 
+
+    print("✅ Completed: Resolution Insights Precompute")
 
 if __name__ == "__main__":
     run_precompute_resolution()

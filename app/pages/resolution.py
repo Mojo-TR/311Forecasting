@@ -11,15 +11,43 @@ register_page(__name__, path="/resolution-insights", title="Resolution Insights"
 # LOAD PRECOMPUTED DATA
 BASE = "precomputed_data/resolution/"
 
-RES_ALL = pd.read_parquet(BASE + "resolution_stats_all_months.parquet")
-RES_MONTHLY = pd.read_parquet(BASE + "resolution_stats.parquet")
+RES_STATS = {
+    "neighborhood": {
+        "monthly": pd.read_parquet(BASE + "resolution_stats_neighborhood.parquet"),
+        "all": pd.read_parquet(BASE + "resolution_stats_all_months_neighborhood.parquet"),
+        "heatmap": pd.read_parquet(BASE + "sla_heatmap_neighborhood.parquet"),
+    },
+    "department": {
+        "monthly": pd.read_parquet(BASE + "resolution_stats_department.parquet"),
+        "all": pd.read_parquet(BASE + "resolution_stats_all_months_department.parquet"),
+        "heatmap": pd.read_parquet(BASE + "sla_heatmap_department.parquet"),
+    },
+    "category": {
+        "monthly": pd.read_parquet(BASE + "resolution_stats_category.parquet"),
+        "all": pd.read_parquet(BASE + "resolution_stats_all_months_category.parquet"),
+        "heatmap": pd.read_parquet(BASE + "sla_heatmap_category.parquet"),
+    },
+}
+
+
 CITY = pd.read_parquet(BASE + "resolution_citywide.parquet")
 FAST_SLOW = pd.read_parquet(BASE + "fastest_slowest.parquet")
-HEATMAP = pd.read_parquet(BASE + "sla_heatmap_matrix.parquet")
 TREND = pd.read_parquet(BASE + "trend.parquet")
 
 MONTHS = pd.read_parquet(BASE + "months.parquet").iloc[:, 0].tolist()
 NEIGH_LIST = pd.read_parquet(BASE + "neighborhoods.parquet").iloc[:, 0].tolist()
+
+TAB_TO_LEVEL = {
+    "rank-nbh": "neighborhood",
+    "rank-dept": "department",
+    "rank-cat": "category",
+    "scatter-nbh": "neighborhood",
+    "scatter-dept": "department",
+    "scatter-cat": "category",
+    "heat-nbh": "neighborhood",
+    "heat-dept": "department",
+    "heat-cat": "category",
+}
 
 month_options = [{"label": "All Months", "value": "all"}] + [
     {"label": m, "value": m} for m in MONTHS
@@ -56,47 +84,63 @@ layout = dbc.Container([
     
     dbc.Spinner(
         children=html.Div([
+            
+            dbc.Row(
+                [
+                    dbc.Col(
+                        dbc.Card(
+                            dbc.CardBody([
+                                html.H4("Resolution Ranking", className="text-white"),
+                                dbc.Tabs(
+                                    [
+                                        dbc.Tab(label="Department", tab_id="rank-dept", labelClassName="text-info-emphasis"),
+                                        dbc.Tab(label="Category", tab_id="rank-cat", labelClassName="text-info-emphasis"),
+                                        dbc.Tab(label="Neighborhood", tab_id="rank-nbh", labelClassName="text-info-emphasis"),
+                                    ],
+                                    id="rank-tabs",
+                                    active_tab="rank-nbh",
+                                    className="mb-3 custom-tabs",
+                                ),
+                                html.Div(
+                                    id="resolution-table",
+                                    style={
+                                        "maxHeight": "500px",
+                                        "overflowY": "auto",
+                                    }
+                                )
+                            ]),
+                            className="bg-dark border-dark h-100"
+                        ),
+                        md=6
+                    ),
 
-            # Ranking Table
-            dbc.Row([
-                dbc.Col(
-                    dbc.Card(
-                        dbc.CardBody([
-                            html.H4("Neighborhood Resolution Ranking", className="text-white"),
-                            html.Div(
-                                id="resolution-table",
-                                style={
-                                    "maxHeight": "500px",
-                                    "overflowY": "auto",
-                                    "paddingRight": "10px"
-                                }
-                            )
-                        ]),
-                        className="bg-dark border-dark"
-                    )
-                )
-            ], className="mb-4"),
-
-            # SLA Heatmap
-            dbc.Row([
-                dbc.Col(
-                    dbc.Card(
-                        dbc.CardBody([
-                            html.H4("SLA Performance Heatmap", className="text-white"),
-                            html.Div(
-                                dcc.Graph(id="resolution-sla-heatmap", style={"height": "600px"}),
-                                style={
-                                    "maxHeight": "500px",
-                                    "overflowY": "auto",
-                                    "paddingRight": "10px"
-                                }
-                            )
-                        ]),
-                        className="bg-dark border-dark"
-                    )
-                )
-            ], className="mb-4"),
-
+                    dbc.Col(
+                        dbc.Card(
+                            dbc.CardBody([
+                                html.H4("Volume vs Resolution Time", className="text-white"),
+                                dbc.Tabs(
+                                    [
+                                        dbc.Tab(label="Department", tab_id="scatter-dept", labelClassName="text-info-emphasis"),
+                                        dbc.Tab(label="Category", tab_id="scatter-cat", labelClassName="text-info-emphasis"),
+                                        dbc.Tab(label="Neighborhood", tab_id="scatter-nbh", labelClassName="text-info-emphasis"),
+                                    ],
+                                    id="scatter-tabs",
+                                    active_tab="scatter-nbh",
+                                    className="mb-3 custom-tabs",
+                                ),
+                                dcc.Graph(
+                                    id="resolution-scatter",
+                                    style={"height": "500px"}
+                                )
+                            ]),
+                            className="bg-dark border-dark h-100"
+                        ),
+                        md=6
+                    ),
+                ],
+                className="mb-4"
+            ),
+                        
             # Trend Over Time
             dbc.Row([
                 dbc.Col(
@@ -110,13 +154,23 @@ layout = dbc.Container([
                 )
             ], className="mb-4"),
 
-            # Volume vs Resolution Scatter
+            # SLA Heatmap
             dbc.Row([
                 dbc.Col(
                     dbc.Card(
                         dbc.CardBody([
-                            html.H4("Volume vs Average Resolution Time", className="text-white"),
-                            dcc.Graph(id="resolution-scatter")
+                            html.H4("SLA Performance Heatmap", className="text-white"),
+                            dbc.Tabs(
+                                [
+                                    dbc.Tab(label="Department", tab_id="heat-dept", labelClassName="text-info-emphasis"),
+                                    dbc.Tab(label="Category", tab_id="heat-cat", labelClassName="text-info-emphasis"),
+                                    dbc.Tab(label="Neighborhood", tab_id="heat-nbh", labelClassName="text-info-emphasis"),
+                                ],
+                                id="heat-tabs",
+                                active_tab="heat-nbh",
+                                className="mb-3 custom-tabs",
+                            ),
+                            dcc.Graph(id="resolution-sla-heatmap", style={"height": "800px", "overflowY": "auto",})
                         ]),
                         className="bg-dark border-dark"
                     )
@@ -139,73 +193,141 @@ layout = dbc.Container([
 
 @callback(
     Output("resolution-kpi-row", "children"),
-    Output("resolution-table", "children"),
-    Output("resolution-sla-heatmap", "figure"),
-    Output("resolution-trend", "figure"),
-    Output("resolution-scatter", "figure"),
-    Input("resolution-month", "value")
+    Input("resolution-month", "value"),
 )
-def update_resolution_page(selected_month):
+def update_resolution_kpis(month):
 
-    if selected_month == "all":
-        dff = RES_ALL
-        city_vals = CITY[CITY["MonthName"] == "all"].iloc[0]
-        fs = FAST_SLOW[FAST_SLOW["MonthName"] == "all"].iloc[0]
+    if month == "all":
+        r = CITY.query("MonthName == 'all'").iloc[0]
+        fs = FAST_SLOW.query("MonthName == 'all'").iloc[0]
     else:
-        dff = RES_MONTHLY[RES_MONTHLY["MonthName"] == selected_month]
-        city_vals = CITY[CITY["MonthName"] == selected_month].iloc[0]
-        fs = FAST_SLOW[FAST_SLOW["MonthName"] == selected_month].iloc[0]
+        r = CITY.query("MonthName == @month").iloc[0]
+        fs = FAST_SLOW.query("MonthName == @month").iloc[0]
 
-    kpis = [
-        make_kpi("Avg Resolution (Citywide)", f"{city_vals['Avg_Resolution']:.0f} days"),
-        make_kpi("Median Resolution (Citywide)", f"{city_vals['Median_Resolution']:.0f} days"),
-        make_kpi("Fastest Neighborhood",
-                 f"{fs['Fastest']} — {fs['FastestValue']:.0f} days",
-                 color="success"),
-        make_kpi("Slowest Neighborhood",
-                 f"{fs['Slowest']} — {fs['SlowestValue']:.0f} days",
-                 color="danger"),
+    return [
+        make_kpi("Avg Resolution (Citywide)", f"{r['Avg_Resolution']:.0f} days"),
+        make_kpi("Median Resolution (Citywide)", f"{r['Median_Resolution']:.0f} days"),
+        make_kpi("Fastest", f"{fs['Fastest']} — {fs['FastestValue']:.0f}", "success"),
+        make_kpi("Slowest", f"{fs['Slowest']} — {fs['SlowestValue']:.0f}", "danger"),
     ]
 
-    # Ranking table
-    table_html = make_table(dff.sort_values("Avg_Resolution"))
 
-    # SLA Heatmap (month-order enforced)
-    sla_fig = px.imshow(
-        HEATMAP[MONTHS],
-        aspect="auto",
-        color_continuous_scale="Plasma",
+@callback(
+    Output("resolution-table", "children"),
+    Input("rank-tabs", "active_tab"),
+    Input("resolution-month", "value"),
+)
+def update_resolution_table(tab, month):
+
+    level = TAB_TO_LEVEL[tab]
+    data = RES_STATS[level]
+
+    if month == "all":
+        df = data["all"]
+    else:
+        df = data["monthly"].query("MonthName == @month")
+
+    if df.empty:
+        return empty_table("No data available.")
+
+    DISPLAY_COLS = ["Group", "Volume", "Avg_Resolution"]
+
+    table_df = (
+        df[DISPLAY_COLS]
+        .sort_values("Avg_Resolution", ascending=True)
+        .assign(Avg_Resolution=lambda x: x["Avg_Resolution"].round(1))
+        .head(15)
     )
-    sla_fig.update_layout(
-        height=2000,
+    
+    table_df.insert(0, "Rank", range(1, len(table_df) + 1))
+
+    return make_table(table_df)
+
+@callback(
+    Output("resolution-scatter", "figure"),
+    Input("scatter-tabs", "active_tab"),
+    Input("resolution-month", "value"),
+)
+def update_resolution_scatter(tab, month):
+
+    level = TAB_TO_LEVEL[tab]
+    data = RES_STATS[level]
+
+    if month == "all":
+        df = data["all"]
+    else:
+        df = data["monthly"].query("MonthName == @month")
+
+    if df.empty:
+        return empty_figure("No data available for this selection.")
+
+    fig = px.scatter(
+        df,
+        x="Volume",
+        y="Avg_Resolution",
+        hover_name="Group",
+        color="Avg_Resolution",
+        color_continuous_scale="Plasma"
+    )
+
+    fig.update_layout(
+        height=500,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font_color="#FFF"
+        xaxis_title="Total Volume",
+        yaxis_title="Avg Resolution (days)",
+        font=dict(color="white"),
+        coloraxis_colorbar=dict(title=""),
+        autosize=False
     )
 
-    # Trend graph
-    trend_fig = px.line(
+    return fig
+
+@callback(
+    Output("resolution-sla-heatmap", "figure"),
+    Input("heat-tabs", "active_tab"),
+)
+def update_heatmap(tab):
+
+    level = TAB_TO_LEVEL[tab]
+    heatmap = RES_STATS[level]["heatmap"]
+
+    fig = px.imshow(
+        heatmap,
+        aspect="auto",
+        color_continuous_scale="Plasma"
+    )
+
+    fig.update_layout(
+        height=1000,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="white"),
+        coloraxis_colorbar=dict(title=""),
+        xaxis=dict(tickangle=-45),
+        margin=dict(b=140)
+    )
+
+    return fig
+
+@callback(
+    Output("resolution-trend", "figure"),
+    Input("resolution-month", "value"),
+)
+def update_trend(_):
+
+    fig = px.line(
         TREND,
         x="Month",
         y="RESOLUTION_TIME_DAYS",
         markers=True,
         template="plotly_dark"
     )
-    trend_fig.update_layout(
-        height=700,
+
+    fig.update_layout(
+        height=500,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)"
     )
 
-    # Scatter
-    scatter_fig = px.scatter(
-        dff,
-        x="Volume",
-        y="Avg_Resolution",
-        text="NEIGHBORHOOD",
-        color="Avg_Resolution",
-        color_continuous_scale="Plasma"
-    )
-    scatter_fig.update_traces(textposition="top center")
-
-    return kpis, table_html, sla_fig, trend_fig, scatter_fig
+    return fig

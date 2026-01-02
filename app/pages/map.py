@@ -32,12 +32,12 @@ default_month = "all"
 
 # Base map
 initial_df = df[df["Year"] == int(default_year)]
-fig = px.scatter_mapbox(
+fig = px.scatter_map(
     initial_df.sample(min(1000, len(initial_df))),
     lat="LATITUDE",
     lon="LONGITUDE",
     color="DEPARTMENT",
-    mapbox_style="carto-darkmatter",
+    map_style="carto-darkmatter",
     zoom=9,
     title=f"311 Complaint Hotspots ({default_year})",
 )
@@ -157,7 +157,7 @@ def update_map(selected_year, selected_month, selected_color):
 
     # Try to build the map
     try:
-        fig = px.scatter_mapbox(
+        fig = px.scatter_map(
             dff,
             lat="LATITUDE",
             lon="LONGITUDE",
@@ -173,7 +173,7 @@ def update_map(selected_year, selected_month, selected_color):
                 "LATITUDE": False,
                 "LONGITUDE": False
             },
-            mapbox_style="carto-positron",
+            map_style="carto-darkmatter",
             zoom=9,
             title=f"311 Complaint Hotspots ({selected_year})"
         )
@@ -185,7 +185,7 @@ def update_map(selected_year, selected_month, selected_color):
         height=700,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font_color="#FFFFFF"
+        font_color="#FFFFFF",
     )
 
     return fig

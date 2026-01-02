@@ -75,64 +75,17 @@ layout = dbc.Container([
         ], width="auto")
     ], justify="center", className="mb-4"),
 
-    html.H5(id="selected-metric-display", className="text-white text-center mt-4 mb-4"),
-
-    # Chart + Legend Row (each with its own spinner)
-    dbc.Row([
-        # Chart
-        dbc.Col(
-            dbc.Card(
-                dbc.CardBody(
-                    dbc.Spinner(
-                        dcc.Graph(
-                            id="stackedbar-graph",
-                            style={"minWidth": "1200px"}
-                        ),
-                        color="primary",
-                        type="grow",
-                        size="lg"
-                    )
-                ),
-                color="dark",
-                outline=True,
-                className="border-dark bg-dark",
-                style={
-                    "overflowX": "auto",
-                    "padding": "10px",
-                }
-            ),
-            width=9
-        ),
-
-        # Legend
-        dbc.Col(
-            dbc.Card(
-                dbc.CardBody(
-                    dbc.Spinner(
-                        html.Div(id="stackedbar-legend"),
-                        color="primary",
-                        type="grow",
-                        size="lg"
-                    )
-                ),
-                color="dark",
-                outline=True,
-                className="border-dark bg-dark",
-                style={
-                    "height": "700px",
-                    "overflowY": "auto",
-                    "padding": "10px",
-                }
-            ),
-            width=3
-        )
-    ], style={"flexWrap": "nowrap"}, className="mb-4"),
-
+    html.H5(id="selected-metric-display", className="text-white text-center mx-4"),
+    
     # Neighborhood Breakdown
     dbc.Row([
         dbc.Col(
             dbc.Card(
                 dbc.CardBody([
+                    html.H4(
+                        "Neighborhood Breakdown",
+                        className="text-white mb-4"
+                    ),
                     # Neighborhood Dropdown
                     dbc.Row([
                         dbc.Col([
@@ -198,7 +151,80 @@ layout = dbc.Container([
                     ])
                 ]),
                 color="dark",
-                className="border-dark bg-dark",
+                className="border-dark bg-dark my-4",
+                style={"padding": "20px"}
+            ),
+            width=12
+        )
+    ]),
+    
+    dbc.Row([
+        dbc.Col(
+            dbc.Card(
+                dbc.CardBody([
+
+                    # Optional section header
+                    html.H4(
+                        "Chart Breakdown (Top 30 NeighborhoodS)",
+                        className="text-white mb-4"
+                    ),
+
+                    # Inner row holding Chart + Legend
+                    dbc.Row([
+
+                        # Chart
+                        dbc.Col(
+                            dbc.Card(
+                                dbc.CardBody(
+                                    dbc.Spinner(
+                                        dcc.Graph(
+                                            id="stackedbar-graph",
+                                            style={"minWidth": "1200px"}
+                                        ),
+                                        color="primary",
+                                        type="grow",
+                                        size="lg"
+                                    )
+                                ),
+                                color="dark",
+                                outline=False,
+                                className="bg-dark border-0",
+                                style={
+                                    "overflowX": "auto",
+                                    "padding": "5px",
+                                }
+                            ),
+                            width=9
+                        ),
+
+                        # Legend
+                        dbc.Col(
+                            dbc.Card(
+                                dbc.CardBody(
+                                    dbc.Spinner(
+                                        html.Div(id="stackedbar-legend"),
+                                        color="primary",
+                                        type="grow",
+                                        size="lg"
+                                    )
+                                ),
+                                color="dark",
+                                outline=False,
+                                className="bg-dark border-0",
+                                style={
+                                    "height": "700px",
+                                    "overflowY": "auto",
+                                    "padding": "5px",
+                                }
+                            ),
+                            width=3
+                        ),
+
+                    ], style={"flexWrap": "nowrap"}),
+
+                ]),
+                color="dark",
+                className="border-dark bg-dark my-4",
                 style={"padding": "20px"}
             ),
             width=12
@@ -221,7 +247,7 @@ layout = dbc.Container([
     Input("month-dropdown", "value"),
     Input("neighborhood-dropdown", "value")
 )
-def update_bar(selected_metric, selected_month, selected_neighborhood):
+def update_fig(selected_metric, selected_month, selected_neighborhood):
 
     # LOAD METRIC DATA
 

@@ -81,7 +81,7 @@ DATA_DICTIONARY = [
         "example": "Pothole",
     },
     {
-        "field": "TYPE",
+        "field": "CASE TYPE",
         "type": "string",
         "description": "More specific type within the broader category.",
         "example": "Large Pothole",
@@ -109,12 +109,6 @@ DATA_DICTIONARY = [
         "type": "float",
         "description": "Latitude / longitude of the complaint location.",
         "example": "29.7562, -95.3635",
-    },
-    {
-        "field": "MonthName",
-        "type": "string",
-        "description": "Month name extracted from CREATED DATE for filtering.",
-        "example": "January",
     },
 ]
 
@@ -527,7 +521,7 @@ def update_slowest(active_tab, month):
 
     df = df.sort_values("MedianDays", ascending=False)
 
-    return make_table(df.head(10))
+    return make_table(df.head(10), hide_cols=["MonthName"])
 
 
 # SLA RISK
@@ -555,7 +549,7 @@ def update_sla_risk(active_tab, month):
 
     df2 = df.rename(columns={"SLA_Percent": "SLA %", "CaseCount": "Cases"})
 
-    return make_table(df2.head(10))
+    return make_table(df.head(10), hide_cols=["MonthName"])
 
 
 # VOLUME TREEMAP
@@ -626,7 +620,7 @@ def update_case_type_list(category):
         return html.P("Select a category.", className="text-muted")
 
     case_types = CATEGORY_TO_TYPES.get(category)
-    if not case_types:
+    if len(case_types) == 0:
         return html.P("No case types found.", className="text-danger")
 
     return dbc.Card(

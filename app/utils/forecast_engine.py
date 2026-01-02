@@ -27,14 +27,22 @@ def _ensure_month_end(df: pd.DataFrame) -> pd.DataFrame:
         df["ds"] = pd.to_datetime(df["ds"])
     return df
 
+def _norm_str(s: pd.Series) -> pd.Series:
+    return (
+        s.astype(str)
+         .str.replace("\u00a0", " ", regex=False)
+         .str.replace(r"\s+", " ", regex=True)
+         .str.strip()
+    )
+
+
 # VOLUME INPUTS
 VOLUME_FULL = pd.read_parquet(BASE + "monthly_volume_full.parquet")
 
-VALID_CITYWIDE_MONTHS = (
-    pd.read_parquet(BASE + "valid_citywide_months.parquet")["YearMonth"]
-    .astype(str)
-    .tolist()
-)
+# Add normalized helper columns (only once, cheap)
+for col in ["NEIGHBORHOOD", "DEPARTMENT", "DIVISION", "CATEGORY"]:
+    if col in VOLUME_FULL.columns:
+        VOLUME_FULL[col + "_CLEAN"] = _norm_str(VOLUME_FULL[col]).str.title()
 
 # SEVERITY INPUTS (preloaded once)
 SEV_CITY = _ensure_month_end(
@@ -57,16 +65,45 @@ SEV_CAT = _ensure_month_end(
     pd.read_parquet(BASE + "monthly_severity_category.parquet")
 )
 
+SEV_NEIGH_DEPT = _ensure_month_end(
+    pd.read_parquet(BASE + "monthly_severity_neighborhood_department.parquet")
+)
+SEV_NEIGH_DIV = _ensure_month_end(
+    pd.read_parquet(BASE + "monthly_severity_neighborhood_division.parquet")
+)
+SEV_NEIGH_CAT = _ensure_month_end(
+    pd.read_parquet(BASE + "monthly_severity_neighborhood_category.parquet")
+)
+
+def _add_clean_cols(sev: pd.DataFrame) -> pd.DataFrame:
+    sev = sev.copy()
+    for col in ["NEIGHBORHOOD", "DEPARTMENT", "DIVISION", "CATEGORY"]:
+        if col in sev.columns:
+            sev[col + "_CLEAN"] = _norm_str(sev[col]).str.title()
+    return sev
+
+SEV_CITY = _add_clean_cols(SEV_CITY)
+SEV_NEIGH = _add_clean_cols(SEV_NEIGH)
+SEV_DEPT = _add_clean_cols(SEV_DEPT)
+SEV_DIV  = _add_clean_cols(SEV_DIV)
+SEV_CAT  = _add_clean_cols(SEV_CAT)
+
+SEV_NEIGH_DEPT = _add_clean_cols(SEV_NEIGH_DEPT)
+SEV_NEIGH_DIV  = _add_clean_cols(SEV_NEIGH_DIV)
+SEV_NEIGH_CAT  = _add_clean_cols(SEV_NEIGH_CAT)
+
 SEVERITY_MAP = {
     "citywide": SEV_CITY,
     "neighborhood": SEV_NEIGH,
     "department": SEV_DEPT,
     "division": SEV_DIV,
     "category": SEV_CAT,
+    "neighborhood_department": SEV_NEIGH_DEPT,
+    "neighborhood_division": SEV_NEIGH_DIV,
+    "neighborhood_category": SEV_NEIGH_CAT,
 }
 
 # HELPERS
-
 def new_prophet():
     return Prophet(interval_width=0.95, yearly_seasonality=True)
 
@@ -126,11 +163,6 @@ def compute_forecast(ts, config, horizon=None):
 
     ts = ts.sort_values("ds")
 
-    # Drop last month as "possibly incomplete"
-    if len(ts) > 0:
-        last_month = ts["ds"].max()
-        ts = ts[ts["ds"] < last_month]
-
     # Not enough data
     if len(ts) < min_months or ts["y"].nunique() < 2:
         ts = ts.copy()
@@ -188,6 +220,12 @@ def get_forecast(neigh, item, level, config, horizon=None):
     Volume forecasts based only on monthly_volume_full parquet.
     Returns (hist, forecast_only, reliability_text, mape)
     """
+    
+    empty_cols = [
+        "ds", "y", "yhat", "yhat_lower",
+        "yhat_upper", "Rolling_Trend", "Rolling_%_Change"
+    ]
+    empty = pd.DataFrame(columns=empty_cols)
 
     level_col = {
         "category": "CATEGORY",
@@ -196,17 +234,42 @@ def get_forecast(neigh, item, level, config, horizon=None):
     }.get(level.lower(), "CATEGORY")
 
     dff = VOLUME_FULL.copy()
+    
+    # Determine correct LEVEL (matches monthly_volume_full.parquet LEVEL values)
+    if neigh == "CITYWIDE" and item == "ALL":
+        level_key = "citywide"
+
+    elif neigh == "CITYWIDE" and item != "ALL":
+        # CITYWIDE item-level (requires precompute LEVEL = "department"/"division"/"category")
+        level_key = level.lower()   # "department" / "division" / "category"
+
+    elif neigh != "CITYWIDE" and item == "ALL":
+        level_key = "neighborhood"
+
+    elif neigh != "CITYWIDE" and item != "ALL":
+        # Neighborhood item-level
+        level_key = f"neighborhood_{level.lower()}"  # "neighborhood_department"/...
+
+    else:
+        return empty, empty, "Unreliable", None
+
+    dff = VOLUME_FULL[VOLUME_FULL["LEVEL"] == level_key].copy()
 
     # Neighborhood filter
     if neigh != "CITYWIDE":
-        value = str(neigh).strip().title()
-        dff = dff[dff["NEIGHBORHOOD"] == value]
-    else:
-        dff = dff[dff["YearMonthStr"].isin(VALID_CITYWIDE_MONTHS)]
+        neigh_clean = _norm_str(pd.Series([neigh])).iloc[0].title()
+        dff = dff[dff["NEIGHBORHOOD_CLEAN"] == neigh_clean]
 
     if item != "ALL":
-        value = str(item).strip()
-        dff = dff[dff[level_col] == value]
+        item_clean = _norm_str(pd.Series([item])).iloc[0].title()
+        dff = dff[dff[level_col + "_CLEAN"] == item_clean]
+        
+    print("DEBUG level_key:", level_key)
+    print("DEBUG neigh:", neigh, "item:", item, "level_col:", level_col)
+    print("DEBUG rows after filters:", len(dff))
+    if len(dff) == 0:
+        print("DEBUG unique departments (sample):", VOLUME_FULL["DEPARTMENT"].dropna().head(10).tolist())
+
 
     if dff.empty:
         # Return empty structures with same columns expected downstream
@@ -261,8 +324,15 @@ def get_severity_forecast(neigh, item, level, config, horizon=None):
             .str.title()
         )
 
-    level_key = level.lower()
-    filter_col = level_key.upper()  # "CATEGORY" / "DEPARTMENT" / "DIVISION" / "NEIGHBORHOOD" / "CITYWIDE"
+    level_base = level.lower()
+
+    if neigh != "CITYWIDE" and item != "ALL":
+        level_key = f"neighborhood_{level_base}"
+    else:
+        level_key = level_base
+
+    filter_col = level_base.upper()
+
 
     if level_key not in SEVERITY_MAP:
         # Failsafe
@@ -275,24 +345,26 @@ def get_severity_forecast(neigh, item, level, config, horizon=None):
     severity = SEVERITY_MAP[level_key].copy()
 
     # Normalize user choices
-    neigh_norm = _norm(pd.Series([neigh])).iloc[0]
-    item_norm = None if item == "ALL" else _norm(pd.Series([item])).iloc[0]
+    neigh_clean = _norm_str(pd.Series([neigh])).iloc[0].title()
+    item_clean = None if item == "ALL" else _norm_str(pd.Series([item])).iloc[0].title()
 
     # ALL items: always use CITYWIDE series (fully consistent)
     if item == "ALL":
         severity = SEV_CITY[["ds", "Severity"]].copy()
-        item_norm = None  # ensure no downstream filtering by item
         # We also ignore neighborhood for ALL-items forecast.
     else:
-        # Neighborhood filtering (only when not CITYWIDE and level supports it)
-        if neigh != "CITYWIDE" and "NEIGHBORHOOD" in severity.columns:
-            sev_neigh_clean = _norm(severity["NEIGHBORHOOD"])
-            severity = severity[sev_neigh_clean == neigh_norm]
+        # Neighborhood filter
+        if neigh != "CITYWIDE" and "NEIGHBORHOOD_CLEAN" in severity.columns:
+            severity = severity[severity["NEIGHBORHOOD_CLEAN"] == neigh_clean]
 
-        # Item filtering for specific category/department/division/etc.
-        if filter_col in severity.columns and item_norm is not None:
-            sev_item_clean = _norm(severity[filter_col])
-            severity = severity[sev_item_clean == item_norm]
+        # Item filter (department / division / category)
+        if item != "ALL":
+            item_col = filter_col + "_CLEAN"   # e.g. DEPARTMENT_CLEAN
+            if item_col in severity.columns:
+                severity = severity[severity[item_col] == item_clean]
+                
+    print("SEV DEBUG rows:", len(severity))
+    print("SEV DEBUG cols:", severity.columns.tolist())
 
     # Empty? → bail out cleanly
     if severity.empty:
@@ -319,25 +391,38 @@ def get_severity_forecast(neigh, item, level, config, horizon=None):
         last_month = original_months[-1]
         second_last_month = original_months[-2]
 
-        # Match closure completeness to forecast target
         df_subset = df.copy()
 
-        # For ALL items → use full citywide closure rate (no neighborhood / level filters)
+        # Only filter df_subset when we're forecasting a specific thing (not ALL)
         if item != "ALL":
+            # Neighborhood filter
             if neigh != "CITYWIDE" and "NEIGHBORHOOD" in df_subset.columns:
-                df_subset = df_subset[_norm(df_subset["NEIGHBORHOOD"]) == neigh_norm]
+                df_subset = df_subset[_norm_str(df_subset["NEIGHBORHOOD"]).str.title() == neigh_clean]
 
-            if filter_col in df_subset.columns and item_norm is not None:
-                df_subset = df_subset[_norm(df_subset[filter_col]) == item_norm]
+            # Item filter (DEPARTMENT / DIVISION / CATEGORY)
+            if filter_col in df_subset.columns and item_clean is not None:
+                df_subset = df_subset[_norm_str(df_subset[filter_col]).str.title() == item_clean]
 
         rate = month_closure_rate(df_subset, second_last_month)
 
         if rate is not None and rate >= 0.90:
-            # Second-last month is solid → drop only the very last month
             ts = ts[ts["ds"] < last_month]
         else:
-            # Second-last is also incomplete → drop both last and second-last
             ts = ts[ts["ds"] < second_last_month]
+            
+    print("SEV DEBUG level_key:", level_key)
+    print("SEV DEBUG neigh_clean:", neigh_clean, "item_clean:", item_clean)
+    print("SEV DEBUG rows:", len(severity))
+
+    if len(severity) == 0:
+        print("SEV DEBUG sample neighborhoods:", severity.columns.tolist())
+        base_df = SEVERITY_MAP[level_key]
+        if "NEIGHBORHOOD_CLEAN" in base_df.columns:
+            print("SEV DEBUG neigh unique sample:", base_df["NEIGHBORHOOD_CLEAN"].dropna().unique()[:10])
+        item_col = filter_col + "_CLEAN"
+        if item_col in base_df.columns:
+            print("SEV DEBUG item unique sample:", base_df[item_col].dropna().unique()[:10])
+
 
     # Fallback if not enough history
     if len(ts) < config["min_months"]:

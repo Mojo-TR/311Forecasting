@@ -174,7 +174,7 @@ layout = dbc.Container([
     
     html.Div(
         id="mape-description",
-        className="text-center text-info mx-5",
+        className="text-center text-info m-5",
         style={"fontSize": "14px"}
     ),
 
@@ -255,6 +255,21 @@ def update_forecasts(selected_neighs, forecast_level, selected_item, forecast_ty
         "Possibly Unreliable forecasts may deviate, "
         "and Unreliable forecasts should be used directionally only."
     )
+    
+    if (
+        forecast_type == "volume"
+        and selected_item != "ALL"
+        and selected_neighs == ["CITYWIDE"]
+    ):
+        return (
+            empty_figure("Citywide item-level volume forecasts are not available."),
+            html.Div(),
+            "Select a specific neighborhood to forecast by item.",
+            True,
+            "info",
+            subtitle,
+            mape_description
+        )
 
     # Normalize neighborhoods
     if not selected_neighs:
@@ -271,7 +286,8 @@ def update_forecasts(selected_neighs, forecast_level, selected_item, forecast_ty
             "No items available for this selection.",
             True,
             "warning",
-            subtitle
+            subtitle,
+            mape_description
         )
 
     fig = go.Figure()
@@ -370,7 +386,9 @@ def update_forecasts(selected_neighs, forecast_level, selected_item, forecast_ty
             disp["Month"] = disp["ds"].dt.strftime("%B %Y")
             disp["Month_dt"] = disp["ds"]
             disp["Neighborhood"] = neigh
-            disp["Item"] = item
+            disp["Item"] = (
+                item if item != "ALL" else forecast_level.title()
+            )
 
             if forecast_type == "severity":
                 disp["Predicted Severity"] = disp["yhat"].round(1)
@@ -392,6 +410,7 @@ def update_forecasts(selected_neighs, forecast_level, selected_item, forecast_ty
             True,
             "warning",
             subtitle,
+            mape_description
         )
 
     # BUILD TABLE
@@ -429,10 +448,10 @@ def update_forecasts(selected_neighs, forecast_level, selected_item, forecast_ty
     # ALERT MESSAGE
     alert_text = "\n".join(reliability_msgs)
     show_alert = True
-    if "Possibly Unreliable" in alert_text:
-        alert_color = "warning"
-    elif "Unreliable" in alert_text:
+    if "Unreliable" in alert_text:
         alert_color = "danger"
+    elif "Possibly Unreliable" in alert_text:
+        alert_color = "warning"
     elif "Reliable" in alert_text:
         alert_color = "info"
     else:
@@ -453,7 +472,8 @@ def update_forecasts(selected_neighs, forecast_level, selected_item, forecast_ty
                 "Forecast contains only zeros — no meaningful pattern detected.",
                 True,
                 "warning",
-                subtitle
+                subtitle,
+                mape_description
             )
 
     # NO FORECASTS?
@@ -464,7 +484,8 @@ def update_forecasts(selected_neighs, forecast_level, selected_item, forecast_ty
             "No forecast rows available.",
             True,
             "danger",
-            subtitle
+            subtitle,
+            mape_description
         )
 
     return fig, table_component, alert_text, show_alert, alert_color, subtitle, mape_description

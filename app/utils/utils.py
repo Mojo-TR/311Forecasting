@@ -61,10 +61,13 @@ def footer():
     ])
 
 
-def make_table(df, col_rename=None):
+def make_table(df, col_rename=None, hide_cols=None):
     """Create a consistent Bootstrap dark table dynamically from any DataFrame."""
     if df.empty:
         return dbc.Alert("No data available.", color="warning")
+    
+    if hide_cols:
+        df = df.drop(columns=hide_cols, errors="ignore")
 
     # Rename columns if dictionary provided
     if col_rename:
@@ -96,7 +99,7 @@ def make_table(df, col_rename=None):
     )
 
 
-def make_sortable_table(df, col_rename=None):
+def make_sortable_table(df, col_rename=None, hide_cols=None):
     """Return a sortable, styled table for any dataframe."""
     if df.empty:
         return dbc.Alert("No data available.", color="warning")
