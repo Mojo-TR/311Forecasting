@@ -221,4 +221,5 @@ __marimo__/
 .venv/
 .idea/
 .DS_Store
+cron_log.txt
 /precomputed_data/
