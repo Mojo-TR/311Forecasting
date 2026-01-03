@@ -215,9 +215,8 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-*.csv
-Post2021/
-Pre2021/
+/csv/
+/data/
 .ipynb_checkpoints/
 .venv/
 .idea/
