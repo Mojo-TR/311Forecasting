@@ -18,8 +18,7 @@ def compute_monthly_volume(df2):
     df2 = df2.copy()
 
     latest = df2["ds"].max()
-    cutoff = (latest.to_period("M") - 1).to_timestamp("M")
-    df2 = df2[df2["ds"] < cutoff]
+    df2 = df2[df2["ds"] < latest]   # drops the latest month
 
     rows = []
     aggregations = [
@@ -83,16 +82,17 @@ def compute_severity(df2):
 
     df2 = df2.copy()
 
-    # 1. Global 95% cap
+    # Global 95% cap
     cap = df2["RESOLUTION_TIME_DAYS"].quantile(0.95)
     df2["RESOLUTION"] = df2["RESOLUTION_TIME_DAYS"].clip(upper=cap)
 
-    # 2. Drop last 2 months (incomplete)
+    # Drop last 2 months (incomplete)
     latest = df2["ds"].max()
-    cutoff = (latest.to_period("M") - 1).to_timestamp("M")
-    df2 = df2[df2["ds"] < cutoff]
+    last_kept = (latest.to_period("M") - 2).to_timestamp("M")
+    df2 = df2[df2["ds"] <= last_kept].copy()
 
-    # 3. Fill missing resolution by CASE TYPE median
+
+    # Fill missing resolution by CASE TYPE median
     medians = df2.groupby("CASE TYPE")["RESOLUTION"].median()
     df2["RESOLUTION"] = df2.apply(
         lambda r: medians.get(r["CASE TYPE"])
@@ -100,7 +100,7 @@ def compute_severity(df2):
         axis=1
     )
 
-    # 4. Drop remaining NaNs
+    # Drop remaining NaNs
     df2 = df2.dropna(subset=["RESOLUTION"])
 
     # AGGREGATIONS
