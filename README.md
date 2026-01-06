@@ -101,6 +101,9 @@ http://127.0.0.1:8050
 
 These design choices are intentional and documented to prioritize stability over noise.
 
+## Data Dictionary
+A full data dictionary describing metrics, dimensions, and derived fields is available in the dashboard and documented in `docs/data_dictionary.md`.
+
 ---
 
 ## Forecasting Approach
@@ -112,6 +115,50 @@ These design choices are intentional and documented to prioritize stability over
     - Minimum historical length
     - Error thresholds (MAPE)
 - Rolling trends shown for interpretability only (not model inputs)
+
+---
+
+## Forecasting Methodology
+
+### Model
+Forecasts are generated using Facebook Prophet with yearly seasonality enabled. The model is selected for its robustness to missing data, ability to capture seasonal patterns, and interpretability.
+
+### Targets
+Two primary forecast types are supported:
+- **Volume**: monthly count of 311 service requests
+- **Severity**: monthly resolution-time–based metrics
+
+### Aggregation & Training Data
+- Data is aggregated at a monthly frequency
+- Incomplete or low-volume months are excluded
+- Forecasts are generated at citywide and neighborhood levels depending on configuration
+- Minimum historical length is required before a forecast is attempted
+
+### Forecast Horizon
+- Forecasts extend a fixed number of months into the future
+- Historical data and forecasted values are concatenated for visualization continuity
+
+### Reliability Rules
+Forecasts are marked unreliable or skipped when:
+- Insufficient historical data remains after filtering
+- Excessive missing values are present
+- Error thresholds (e.g., MAPE) exceed acceptable limits
+
+### Error Metrics & Edge Case Handling
+
+Forecast accuracy is evaluated using Mean Absolute Percentage Error (MAPE), computed on a holdout window of recent historical data when sufficient observations are available.
+
+MAPE is used as a reliability signal rather than an optimization objective.
+
+#### Edge Case Handling
+- Forecasts are skipped or marked unreliable when:
+  - Actual values contain zeros or near-zeros that would inflate MAPE
+  - The training series is constant or exhibits insufficient variance
+  - Too few observations remain after preprocessing
+- In cases where MAPE cannot be computed reliably, forecasts default to an "unreliable" status rather than emitting misleading error values
+
+### Notes on Reproducibility
+Exploratory notebooks may produce slightly different results due to alternative preprocessing choices or relaxed filtering. Dashboards display only validated, precomputed forecasts designed for stability and comparability.
 
 ---
 
