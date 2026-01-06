@@ -2,7 +2,7 @@
 
 ## Overview
 
-311 Detector is an end-to-end data analytics and forecasting platform built to analyze Houston 311 service requests. The project ingests raw city data, transforms it into analytics-ready datasets, and powers interactive dashboards and time-series forecasts to surface trends, bottlenecks, and future demand.
+311 Detector is an end-to-end data analytics and forecasting platform built to analyze Houston 311 service requests. The project ingests raw city data, transforms it into analytics ready datasets, and powers interactive dashboards and time-series forecasts to surface trends, bottlenecks, and future demand.
 
 The system is designed with performance and scalability in mind, using precomputed datasets and modular forecasting logic to support fast, reliable visualizations.
 
@@ -65,7 +65,7 @@ The system is designed with performance and scalability in mind, using precomput
 **Python 3.10+ recommended**
 
 ```bash
-gitclone https://github.com/yourusername/311Detector.git
+gitclone https://github.com/Mojo-TR/311Forecasting
 cd 311Detector
 python -m venv .venv
 source .venv/bin/activate
