@@ -288,11 +288,20 @@ def update_resolution_scatter(tab, month):
         height=500,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        xaxis_title="Total Volume",
+        xaxis_title="Total Complaints",
         yaxis_title="Avg Resolution (days)",
         font=dict(color="white"),
         coloraxis_colorbar=dict(title=""),
         autosize=False
+    )
+    
+    fig.update_traces(
+        hovertemplate=(
+            "<b>%{hovertext}</b><br>"
+            "<b>Total Complaints:</b> %{x:,}<br>"
+            "<b>Avg Resolution:</b> %{y:.1f} days"
+            "<extra></extra>"
+        )
     )
 
     return fig
@@ -327,8 +336,24 @@ def update_heatmap(tab):
                 "July", "August", "September", "October", "November", "December"
             ],
         ),
+        hoverlabel=dict(
+            bgcolor="#170229",
+            font_color="#EAEAEA",
+            bordercolor="#555",
+            font_size=13,
+            font_family="Inter, Arial, sans-serif",
+        ),
         yaxis=dict(title=LEVEL_TO_LABEL[level].title()),
         margin=dict(b=140)
+    )
+    
+    fig.update_traces(
+        hovertemplate=(
+            "<b>%{y}</b><br>"
+            "<b>Month:</b> %{x}<br>"
+            "<b>SLA Performance:</b> %{z:.1f}%"
+            "<extra></extra>"
+        )
     )
 
     return fig
@@ -352,6 +377,14 @@ def update_trend(_):
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         yaxis_title="Avg Resolution Time (days)",
+    )
+    
+    fig.update_traces(
+        hovertemplate=(
+            "<b>%{x}</b><br>"
+            "<b>Avg Resolution Time:</b> %{y:.1f} days"
+            "<extra></extra>"
+        )
     )
 
     return fig

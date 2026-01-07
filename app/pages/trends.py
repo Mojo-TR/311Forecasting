@@ -141,7 +141,7 @@ def update_timeseries(selected_neigh, mode):
         template="plotly_dark",
         title=title + (f" — {selected_neigh}" if selected_neigh else ""),
         labels={
-            "Count": "Report Count",
+            "Count": "Complaints",
             "Month_Year": "Month",
             "Month": "Month"
         },
@@ -162,6 +162,13 @@ def update_timeseries(selected_neigh, mode):
             bordercolor="#555",
             font_size=13,
             font_family="Inter, Arial, sans-serif",
+        )
+    )
+    
+    fig.update_traces(
+        hovertemplate=(
+            "<b>Complaints:</b> %{y:,}"
+            "<extra></extra>"
         )
     )
 

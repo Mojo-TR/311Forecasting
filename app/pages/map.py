@@ -118,6 +118,10 @@ def update_map(selected_year, selected_month, selected_color):
     if not selected_year:
         return empty_map("No year selected")
 
+    # Default color choice (optional but recommended)
+    if not selected_color:
+        selected_color = "CATEGORY"
+
     # Filter by year
     try:
         dff = df[df["Year"] == int(selected_year)]
@@ -128,7 +132,6 @@ def update_map(selected_year, selected_month, selected_color):
     if selected_month and selected_month != "all":
         dff = dff[dff["MonthName"] == selected_month]
 
-    # No rows at all
     if dff.empty:
         return empty_map("No complaint data for these filters")
 
@@ -155,7 +158,52 @@ def update_map(selected_year, selected_month, selected_color):
         if col not in dff.columns:
             return empty_map(f"Missing column: {col}")
 
-    # Try to build the map
+    # Base hover fields you always want
+    base_hover = {
+        "NEIGHBORHOOD": True,
+        "DEPARTMENT": True,
+        "DIVISION": True,
+        "CATEGORY": True,
+        "LATITUDE": False,
+        "LONGITUDE": False,
+    }
+    
+    for c in ["DEPARTMENT", "DIVISION", "CATEGORY"]:
+        base_hover[c] = (c == color_arg)
+
+
+    # Add ONLY the selected color field (with formatting)
+    hover_data = base_hover.copy()
+    if color_arg == "RESOLUTION_TIME_DAYS":
+        hover_data["RESOLUTION_TIME_DAYS"] = ":.0f"
+    else:
+        # format numbers nicely; otherwise just show value
+        if str(dff[color_arg].dtype) != "object":
+            hover_data[color_arg] = ":,"
+        else:
+            hover_data[color_arg] = True
+            
+    # Make sure neighborhood is never NaN
+    dff["NEIGHBORHOOD"] = dff["NEIGHBORHOOD"].fillna("Unknown")
+
+    # Pretty label for hover
+    label_map = {
+        "RESOLUTION_TIME_DAYS": "Resolution Time (days)",
+        "DEPARTMENT": "Department",
+        "DIVISION": "Division",
+        "CATEGORY": "Category"
+    }
+    hover_label = label_map.get(color_arg, color_arg.replace("_", " ").title())
+
+    # Create hover display value BEFORE building the figure
+    if color_arg == "RESOLUTION_TIME_DAYS":
+        dff["_hover_val"] = dff[color_arg].round(0).astype("Int64").astype(str) + " days"
+    elif str(dff[color_arg].dtype) != "object":
+        dff["_hover_val"] = dff[color_arg].map(lambda x: f"{x:,.0f}" if pd.notna(x) else "—")
+    else:
+        dff["_hover_val"] = dff[color_arg].fillna("—").astype(str)
+
+    # Build the map (no hover_data needed)
     try:
         fig = px.scatter_map(
             dff,
@@ -163,16 +211,6 @@ def update_map(selected_year, selected_month, selected_color):
             lon="LONGITUDE",
             color=color_arg,
             color_continuous_scale=color_scale,
-            hover_name="CATEGORY",
-            hover_data={
-                "NEIGHBORHOOD": True,
-                "DEPARTMENT": True,
-                "DIVISION": True,
-                "CATEGORY": True,
-                "RESOLUTION_TIME_DAYS": ":.0f",
-                "LATITUDE": False,
-                "LONGITUDE": False
-            },
             map_style="carto-darkmatter",
             zoom=9,
             title=f"311 Complaint Hotspots ({selected_year})"
@@ -180,7 +218,16 @@ def update_map(selected_year, selected_month, selected_color):
     except Exception:
         return empty_map("Unable to render map with the selected fields")
 
-    # Final styling
+    # Custom hover
+    fig.update_traces(
+        customdata=dff[["NEIGHBORHOOD", "_hover_val"]].to_numpy(),
+        hovertemplate=(
+            "<b>%{customdata[0]}</b><br>"
+            f"<b>{hover_label}:</b> %{{customdata[1]}}"
+            "<extra></extra>"
+        )
+    )
+
     fig.update_layout(
         height=700,
         paper_bgcolor="rgba(0,0,0,0)",

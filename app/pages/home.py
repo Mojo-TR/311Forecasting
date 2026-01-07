@@ -116,8 +116,16 @@ else:
         plot_bgcolor="rgba(0,0,0,0)",
         font_color="#FFF",
         xaxis_title="Month",
+        yaxis_title="Complaints",
         margin=dict(l=0, r=0, t=40, b=0),
     )
+    
+    trend_fig.update_traces(
+        hovertemplate=
+            "<b>Month:</b> %{x}<br>" +
+            "<b>Requests:</b> %{y:,}<extra></extra>"
+    )
+
 
 top_5_cache = {}
 for col in ["NEIGHBORHOOD", "DEPARTMENT", "DIVISION", "CATEGORY"]:
@@ -141,7 +149,7 @@ layout = dbc.Container([
                         f"{cases_yesterday:,}" if cases_yesterday is not None else "N/A",
                         className="text-white fw-bold"
                     ),
-                    dbc.Button("View Complaints →", href="/complaints", color="primary", className="mt-2 w-100")
+                    dbc.Button("View Complaints →", href="/complaint-trends", color="primary", className="mt-2 w-100")
                 ])
             ], className="bg-dark text-light border-dark mb-4"),
             width=3
@@ -153,7 +161,7 @@ layout = dbc.Container([
                 dbc.CardBody([
                     html.H4("Cases This Month", className="card-title text-primary no-glow fw-bold"),
                     html.H2(f"{cases_this_month:,}", className="text-white fw-bold"),
-                    dbc.Button("View Complaints →", href="/complaints", color="primary", className="mt-2 w-100")
+                    dbc.Button("View Complaints →", href="/complaint-trends", color="primary", className="mt-2 w-100")
                 ])
             ], className="bg-dark text-light border-dark mb-4"),
             width=3
@@ -281,21 +289,6 @@ layout = dbc.Container([
                         html.H2(f"{avg_resolution_days:,.0f} Days", className="card-text text-success")
                     ])
                 ], color="dark", outline=True, style=card_style),
-
-                # "See More" link directly under the card
-                html.Nav(
-                    html.Ol([
-                        html.Li(
-                            html.A(
-                                "See More",
-                                href="/summary",
-                                className="text-decoration-none text-primary"
-                            ),
-                            className="breadcrumb-item active"
-                        )
-                    ], className="breadcrumb mb-0"),
-                    style={"marginTop": "5px", "textAlign": "center"}
-                )
             ],
             width=3
         ),

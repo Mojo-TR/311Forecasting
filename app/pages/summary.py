@@ -580,6 +580,15 @@ def update_volume_treemap(tab, month):
         plot_bgcolor="rgba(0,0,0,0)",
         font_color="white",
     )
+    
+    fig.update_traces(
+        hovertemplate=(
+            "<b>%{label}</b><br>"
+            "Total Complaints: %{value:,}"
+            "<extra></extra>"
+        )
+    )
+    
     return fig
 
 
@@ -602,7 +611,16 @@ def update_volume_trend(_month):
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
+        yaxis_title="Complaints",
         height=420,
+    )
+    
+    fig.update_traces(
+        hovertemplate=(
+            "<b>%{x|%B %Y}</b><br>"
+            "<b>Complaints:</b> %{y:,}"
+            "<extra></extra>"
+        )
     )
 
     return fig

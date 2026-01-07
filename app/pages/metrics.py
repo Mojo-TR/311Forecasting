@@ -58,7 +58,7 @@ layout = dbc.Container([
             html.Label("Group By:", className="text-white mb-2"),
             dbc.Select(
                 id="stackedbar-metric-dropdown",
-                options=[{"label": m, "value": m} for m in metrics],
+                options=[{"label": m.title(), "value": m} for m in metrics],
                 value="DEPARTMENT",
                 style={"width": "300px"}
             )
@@ -311,12 +311,24 @@ def update_fig(selected_metric, selected_month, selected_neighborhood):
 
     fig.update_layout(
         xaxis_tickangle=-45,
+        xaxis_title="Neighborhood",
+        yaxis_title="Complaints",
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         font_color="#FFF",
         showlegend=False,
         margin=dict(l=40, r=40, t=80, b=80),
     )
+    
+    fig.update_traces(
+        hovertemplate=(
+            "<b>%{x}</b><br>"
+            f"<b>{selected_metric.title()}:</b> %{{fullData.name}}<br>"
+            "<b>Complaints:</b> %{y:,}"
+            "<extra></extra>"
+        )
+    )
+
 
     # LEGEND
 
@@ -362,7 +374,7 @@ def update_fig(selected_metric, selected_month, selected_neighborhood):
         table_block = make_table(
             table_df.rename(columns={
                 selected_metric: selected_metric.title(),
-                "Count": "Requests"
+                "Count": "Complaints"
             })
         )
 
@@ -378,7 +390,16 @@ def update_fig(selected_metric, selected_month, selected_neighborhood):
             color_discrete_map=color_map
         )
 
-        pie_fig.update_traces(hole=0.4, textinfo="none")
+        pie_fig.update_traces(
+            hole=0.4, 
+            textinfo="none",
+            hovertemplate=(
+                "<b>%{label}</b><br>"
+                "Complaints: %{value:,}"
+                "<extra></extra>"
+            )
+        )
+        
         pie_fig.update_layout(
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
