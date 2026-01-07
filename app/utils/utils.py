@@ -41,25 +41,55 @@ def footer():
             dbc.Col(
                 html.P([
                     html.Span("Developed by "),
-                    html.A("Mojoolu Roberts", href="https://www.linkedin.com/in/mojotr/", 
-                        className="text-info", target="_blank"),
+                    html.A(
+                        "Mojoolu Roberts",
+                        href="https://www.linkedin.com/in/mojotr/",
+                        className="text-info",
+                        target="_blank",
+                        id="tooltip-dev"
+                    ),
                     html.Span(" | Data: "),
-                    html.A("houstontx.gov", 
-                        href="https://www.houstontx.gov/311/servicerequestdata.html", 
-                        className="text-info", target="_blank"),
-                    html.Span(" | "), 
-                    html.A("Source Code", href="https://github.com/Mojo-TR/311Forecasting", className="text-info", target="_blank")
+                    html.A(
+                        "houstontx.gov",
+                        href="https://www.houstontx.gov/311/servicerequestdata.html",
+                        className="text-info",
+                        target="_blank",
+                        id="tooltip-data"
+                    ),
+                    html.Span(" | "),
+                    html.A(
+                        "Source Code",
+                        href="https://github.com/Mojo-TR/311Forecasting",
+                        className="text-info",
+                        target="_blank",
+                        id="tooltip-code"
+                    )
                 ],
                 className="text-info text-center mt-4 mb-2",
                 style={"fontSize": "0.9rem"})
             )
-        ], justify="center")
+        ], justify="center"),
 
-        # # Tooltips
-        # dbc.Tooltip("Visit my GitHub profile", target="tooltip-dev", placement="top"),
-        # dbc.Tooltip("Go to the official Houston 311 Open Data Portal", target="tooltip-data", placement="top"),
+        # Tooltips
+        dbc.Tooltip(
+            "Visit my LinkedIn profile",
+            target="tooltip-dev",
+            placement="top",
+            class_name="text-info"
+        ),
+        dbc.Tooltip(
+            "Houston 311 Open Data Portal",
+            target="tooltip-data",
+            placement="top",
+            class_name="text-info"
+        ),
+        dbc.Tooltip(
+            "View the GitHub repository",
+            target="tooltip-code",
+            placement="top",
+            class_name="text-info"
+        ),
     ])
-
 
 def make_table(df, col_rename=None, hide_cols=None):
     """Create a consistent Bootstrap dark table dynamically from any DataFrame."""

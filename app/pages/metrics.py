@@ -336,7 +336,6 @@ def update_fig(selected_metric, selected_month, selected_neighborhood):
         )
 
     # PIE + TABLE SECTION
-    # Must NOT depend on top 30 filtering
     raw_df = neigh_df.copy()
 
     # Apply month correctly

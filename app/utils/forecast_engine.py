@@ -12,7 +12,7 @@ FORECAST_CONFIG = {
     },
     "severity": {
         "min_months": 6,
-        "max_mape": 70,
+        "max_mape": 60,
         "horizon_months": 6,
         "trend_window": 2,
     },

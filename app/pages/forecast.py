@@ -64,7 +64,7 @@ layout = dbc.Container([
             ),
         ], width=4),
         dbc.Col([
-            dbc.Label("Select Item:", className="text-white"),
+            html.Label(id="item-select-label", className="text-white pb-2"),
             dbc.Select(id="item-select", options=[{"label": "All Items", "value": "ALL"}], value="ALL")
         ], width=4),
     ], justify="center", className="mb-3"),
@@ -187,6 +187,7 @@ layout = dbc.Container([
 @callback(
     Output("item-select", "options"),
     Output("item-select", "value"),
+    Output("item-select-label", "children"),
     Input("neighborhood-select", "value"),
     Input("forecast-level", "value")
 )
@@ -197,6 +198,16 @@ def update_items_dropdown(selected_neighs, forecast_level):
         "department": "DEPARTMENT",
         "division": "DIVISION"
     }.get(forecast_level.lower(), "CATEGORY")
+    
+    level_name = forecast_level.title()              # Department / Division / Category
+    
+    plural = {
+        "category": "Categories",
+        "division": "Divisions",
+        "department": "Departments"
+    }[forecast_level.lower()]
+
+    all_label = f"All {plural}"
 
     # Normalize neighborhoods
     if not selected_neighs:
@@ -219,15 +230,14 @@ def update_items_dropdown(selected_neighs, forecast_level):
         items.update(df_sub[level_col].dropna().astype(str).str.strip().unique())
         
     if not items:
-        return [{"label": "No items available", "value": "EMPTY"}], "EMPTY"
+        return [{"label": f"No {level_name}s available", "value": "EMPTY"}], "EMPTY", f"Select {level_name}:"
 
     # ALWAYS return something valid
-    options = [{"label": "All Items", "value": "ALL"}] + [
+    options = [{"label": all_label, "value": "ALL"}] + [
         {"label": item, "value": item} for item in sorted(items)
     ]
 
-
-    return options, "ALL"
+    return options, "ALL", f"Select {level_name}:"
 
 @callback(
     Output("forecast-graph", "figure"),
@@ -244,6 +254,10 @@ def update_items_dropdown(selected_neighs, forecast_level):
     Input("forecast-horizon", "value")
 )
 def update_forecasts(selected_neighs, forecast_level, selected_item, forecast_type, horizon):
+    
+    raw_neighs = selected_neighs  # keep original input
+    show_neighborhood_col = bool(raw_neighs)  # only show if user actually selected something
+    show_item_col = selected_item not in (None, "ALL", "EMPTY")
 
     # Subtitle
     subtitle = f"Forecasting {forecast_level.title()} {forecast_type.title()} Trends"
@@ -256,11 +270,8 @@ def update_forecasts(selected_neighs, forecast_level, selected_item, forecast_ty
         "and Unreliable forecasts should be used directionally only."
     )
     
-    if (
-        forecast_type == "volume"
-        and selected_item != "ALL"
-        and selected_neighs == ["CITYWIDE"]
-    ):
+    if forecast_type == "volume" and selected_item != "ALL" and not show_neighborhood_col:
+
         return (
             empty_figure("Citywide item-level volume forecasts are not available."),
             html.Div(),
@@ -293,6 +304,8 @@ def update_forecasts(selected_neighs, forecast_level, selected_item, forecast_ty
     fig = go.Figure()
     all_forecasts = []
     reliability_msgs = []
+    negative_hits = []
+    MAPE_CUTOFF = 100  # hard reject threshold
 
     config = FORECAST_CONFIG[forecast_type]
     get_func = get_severity_forecast if forecast_type == "severity" else get_forecast
@@ -307,6 +320,18 @@ def update_forecasts(selected_neighs, forecast_level, selected_item, forecast_ty
                 )
             except Exception as e:
                 reliability_msgs.append(f"{neigh}/{item}: Forecast engine failed")
+                continue
+            
+            # MAPE too high or not avaiilible → do not show forecast
+            if mape is None or np.isnan(mape) or mape > MAPE_CUTOFF:
+                reason = (
+                    "MAPE unavailable"
+                    if mape is None or np.isnan(mape)
+                    else f"MAPE {mape:.1f}% > {MAPE_CUTOFF}%"
+                )
+                reliability_msgs.append(
+                    f"{neigh}/{item}: Rejected ({reason})"
+                )
                 continue
 
             # If engine returns nothing
@@ -325,17 +350,19 @@ def update_forecasts(selected_neighs, forecast_level, selected_item, forecast_ty
             # Determine forecast_future depending on forecast type
             forecast_future = forecast.copy()
 
-            # Safety: if nothing left, skip
-            if forecast_future.empty:
-                reliability_msgs.append(f"{neigh}/{item}: No future forecast rows")
-                continue
-
             # Limit to horizon
             if horizon and horizon > 0:
                 forecast_future = forecast_future.head(horizon)
-
+                
+            # Safety: if nothing left, skip
             if forecast_future.empty:
                 reliability_msgs.append(f"{neigh}/{item}: No future rows")
+                continue
+            
+            # Detect negative forecasts
+            if (forecast_future["yhat"] < 0).any():
+                negative_hits.append(f"{neigh}/{item}")
+                reliability_msgs.append(f"{neigh}/{item}: Rejected (negative forecast values)")
                 continue
 
             # Styles
@@ -400,30 +427,61 @@ def update_forecasts(selected_neighs, forecast_level, selected_item, forecast_ty
                 disp["Rolling % Change"] = disp["Rolling_%_Change"].round(1).astype(str) + "%"
 
             all_forecasts.append(disp)
-
-    # NO FORECASTS?
+        
+    # NEGATIVE FORECASTS FOUND?
+    if negative_hits:
+        msg = "Negative forecast values detected for: " + ", ".join(negative_hits)
+        return (
+            empty_figure("Forecast produced negative values."),
+            dbc.Alert("No forecast table — negative values detected.", color="danger"),
+            msg,
+            True,
+            "danger",
+            subtitle,
+            mape_description
+        )    
+        
+    # ALL FORECASTS REJECTED / NO FORECASTS LEFT
     if not all_forecasts:
         return (
             empty_figure("No forecast data available for this selection"),
-            dbc.Alert("No forecast rows available.", color="warning"),
-            "No forecast rows available.",
+            dbc.Alert("No forecast rows available.", color="danger"),
+            "\n".join(reliability_msgs) if reliability_msgs else "No forecast rows available.",
             True,
-            "warning",
+            "danger",
             subtitle,
             mape_description
         )
 
     # BUILD TABLE
     display_table = pd.concat(all_forecasts, ignore_index=True)
-    display_table = display_table.sort_values(by=["Month_dt", "Neighborhood"])
+
+    # Sort: only use Neighborhood if it's actually shown
+    sort_cols = ["Month_dt"]
+    if show_neighborhood_col:
+        sort_cols.append("Neighborhood")
+    display_table = display_table.sort_values(by=sort_cols)
+
+    # Build columns dynamically
+    columns = ["Month_dt", "Month"]
+
+    if show_neighborhood_col:
+        columns.append("Neighborhood")
+
+    if show_item_col:
+        columns.append("Item")
 
     if forecast_type == "severity":
-        columns = ["Month", "Neighborhood", "Item", "Predicted Severity", "Rolling Trend", "Rolling % Change"]
+        columns += ["Predicted Severity", "Rolling Trend", "Rolling % Change"]
     else:
-        columns = ["Month", "Neighborhood", "Item", "Predicted Complaints", "Rolling Trend", "Rolling % Change"]
+        columns += ["Predicted Complaints", "Rolling Trend", "Rolling % Change"]
 
-    display_table = display_table[columns]
-    display_table = display_table.rename(columns={"Item": forecast_level.title()})
+    # Slice + drop helper sort column
+    display_table = display_table[columns].drop(columns=["Month_dt"])
+
+    # Rename Item header only if it exists
+    if show_item_col:
+        display_table = display_table.rename(columns={"Item": forecast_level.title()})
 
     table_component = dbc.Card(
         dbc.CardBody(
@@ -448,15 +506,14 @@ def update_forecasts(selected_neighs, forecast_level, selected_item, forecast_ty
     # ALERT MESSAGE
     alert_text = "\n".join(reliability_msgs)
     show_alert = True
-    if "Unreliable" in alert_text:
-        alert_color = "danger"
-    elif "Possibly Unreliable" in alert_text:
+    if "Possibly Unreliable" in alert_text:
         alert_color = "warning"
+    elif "Unreliable" in alert_text:
+        alert_color = "danger"
     elif "Reliable" in alert_text:
         alert_color = "info"
     else:
         alert_color = "secondary"
-
     
     # DETECT USELESS FORECASTS (all zeros)
     if all_forecasts:

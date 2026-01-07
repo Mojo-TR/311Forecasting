@@ -140,7 +140,11 @@ def update_timeseries(selected_neigh, mode):
         render_mode="webgl",
         template="plotly_dark",
         title=title + (f" — {selected_neigh}" if selected_neigh else ""),
-        labels={"Count": "Report Count"},
+        labels={
+            "Count": "Report Count",
+            "Month_Year": "Month",
+            "Month": "Month"
+        },
         height=700,
     )
 
@@ -152,6 +156,13 @@ def update_timeseries(selected_neigh, mode):
         plot_bgcolor="rgba(0,0,0,0)",
         margin=dict(l=40, r=40, t=80, b=80),
         width=1250,
+        hoverlabel=dict(
+            bgcolor="#170229",
+            font_color="#EAEAEA",
+            bordercolor="#555",
+            font_size=13,
+            font_family="Inter, Arial, sans-serif",
+        )
     )
 
     return fig

@@ -49,6 +49,12 @@ TAB_TO_LEVEL = {
     "heat-cat": "category",
 }
 
+LEVEL_TO_LABEL = {
+    "neighborhood": "Neighborhood",
+    "department": "Department",
+    "category": "Category",
+}
+
 month_options = [{"label": "All Months", "value": "all"}] + [
     {"label": m, "value": m} for m in MONTHS
 ]
@@ -221,6 +227,7 @@ def update_resolution_table(tab, month):
 
     level = TAB_TO_LEVEL[tab]
     data = RES_STATS[level]
+    label = LEVEL_TO_LABEL[level]
 
     if month == "all":
         df = data["all"]
@@ -241,7 +248,14 @@ def update_resolution_table(tab, month):
     
     table_df.insert(0, "Rank", range(1, len(table_df) + 1))
 
-    return make_table(table_df)
+    return make_table(
+        table_df,
+            col_rename={
+            "Group": label,
+            "Avg_Resolution": "Avg Resolution"
+        }
+    )
+
 
 @callback(
     Output("resolution-scatter", "figure"),
@@ -304,7 +318,16 @@ def update_heatmap(tab):
         plot_bgcolor="rgba(0,0,0,0)",
         font=dict(color="white"),
         coloraxis_colorbar=dict(title=""),
-        xaxis=dict(tickangle=-45),
+        xaxis=dict(
+            tickangle=-45,
+            title="Month",
+            categoryorder="array",
+            categoryarray=[
+                "January", "February", "March", "April", "May", "June",
+                "July", "August", "September", "October", "November", "December"
+            ],
+        ),
+        yaxis=dict(title=LEVEL_TO_LABEL[level].title()),
         margin=dict(b=140)
     )
 
@@ -327,7 +350,8 @@ def update_trend(_):
     fig.update_layout(
         height=500,
         paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)"
+        plot_bgcolor="rgba(0,0,0,0)",
+        yaxis_title="Avg Resolution Time (days)",
     )
 
     return fig

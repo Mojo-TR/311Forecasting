@@ -263,3 +263,12 @@ if __name__ == "__main__":
     refresh_year(URL_CURRENT, TABLE_CURRENT)
 
     print("\n✔ All done! Daily refresh complete.")
+    
+    # Run precompute after data refresh
+    print("\n⚙️  Running precompute pipeline...")
+
+    import runpy
+    from pathlib import Path
+    runpy.run_path(str(Path(__file__).with_name("precompute.py")), run_name="__main__")
+
+    print("✅ Precompute complete.")

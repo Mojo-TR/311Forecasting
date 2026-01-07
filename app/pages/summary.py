@@ -521,7 +521,7 @@ def update_slowest(active_tab, month):
 
     df = df.sort_values("MedianDays", ascending=False)
 
-    return make_table(df.head(10), hide_cols=["MonthName"])
+    return make_table(df.head(10), hide_cols=["MonthName"], col_rename={"MedianDays": "Median Resolution (Days)", "CaseCount": "Cases"})
 
 
 # SLA RISK
@@ -547,9 +547,7 @@ def update_sla_risk(active_tab, month):
     df = df.sort_values("SLA_Percent")
     df["SLA_Percent"] = df["SLA_Percent"].round(1)
 
-    df2 = df.rename(columns={"SLA_Percent": "SLA %", "CaseCount": "Cases"})
-
-    return make_table(df.head(10), hide_cols=["MonthName"])
+    return make_table(df.head(10), hide_cols=["MonthName"], col_rename= {"SLA_Percent": "SLA %", "CaseCount": "Cases"})
 
 
 # VOLUME TREEMAP

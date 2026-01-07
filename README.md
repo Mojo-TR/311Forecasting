@@ -193,6 +193,11 @@ In short: notebooks prioritize exploration, dashboards prioritize reliability.
 
 ---
 
+## Onboarding & Operations
+Operational workflows for refreshing data, updating logic, and performing QA checks are documented in `docs/onboarding.md`.
+
+---
+
 ## Future Improvements
 - Scheduled refresh via cron / task runner
 - Model comparison (Prophet vs ARIMA)

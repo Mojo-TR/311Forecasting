@@ -115,7 +115,7 @@ else:
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         font_color="#FFF",
-        xaxis_title="Date",
+        xaxis_title="Month",
         margin=dict(l=0, r=0, t=40, b=0),
     )
 
@@ -429,7 +429,7 @@ def update_top_5(scope):
             return dbc.Alert("No records found.", color="warning")
 
         try:
-            return make_table(df_top)
+            return make_table(df_top, col_rename={col: col.title()})
         except Exception:
             return dbc.Alert("Failed to load table.", color="danger")
 
