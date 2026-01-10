@@ -75,6 +75,134 @@ pip install -r requirements.txt
 
 ---
 
+## Data
+
+### Clean Export (CSV)
+Download the cleaned dataset used in this project (Last updaated January 10th, 2026) here:
+- **Google Drive (view):** [Houston_311_Export.csv](https://drive.google.com/file/d/12wcNjMJwK406nBA-pEQ17nXMWFKFrvGC/view)
+
+If you want a one-click download:
+- **Direct download:** [Download CSV](https://drive.google.com/uc?export=download&id=12wcNjMJwK406nBA-pEQ17nXMWFKFrvGC)
+
+> Notes:
+> - This file is generated from the PostgreSQL table after the refresh + upsert pipeline runs.
+> - It may be updated periodically; check the file timestamp in Drive.
+
+---
+
+## Google Colab Setup (Optional)
+
+If you're running analysis notebooks in **Google Colab**, install the visualization + modeling libraries:
+
+```python
+!pip -q install pandas numpy matplotlib plotly scikit-learn statsmodels prophet pyarrow fastparquet
+```
+
+After installing libraries in Colab, restart the runtime:
+Runtime → Restart runtime
+
+This is required for Prophet to import correctly.
+
+---
+
+## How to Use the Dataset in Notebooks
+
+### Option A: Google Colab (Recommended)
+
+### 1️⃣ Download the dataset
+
+```python
+!wget -q"https://drive.google.com/uc?export=download&id=12wcNjMJwK406nBA-pEQ17nXMWFKFrvGC" -O Houston_311_Export.csv
+
+```
+
+### 2️⃣ Load it into Pandas
+
+```python
+import pandasas pd
+
+df = pd.read_csv("Houston_311_Export.csv")
+df.head()
+
+```
+
+That’s it. You’re working with the full cleaned dataset.
+
+---
+
+### Option B: Local Python
+
+### 1️⃣ Download
+
+- Click the **Direct download** link in the Data section
+- Keep the file as `Houston_311_Export.csv`
+
+### 2️⃣ Load
+
+```python
+import pandasas pd
+
+df = pd.read_csv("Houston_311_Export.csv")
+
+```
+
+---
+
+## Dataset Overview
+
+**Each row represents one 311 service request.**
+
+Key columns:
+
+- `CASE NUMBER` — unique identifier
+- `CREATED DATE` — request creation timestamp
+- `CLOSED DATE` — resolution timestamp (if closed)
+- `RESOLUTION_TIME_DAYS` — rounded resolution time
+- `NEIGHBORHOOD` — standardized super-neighborhood
+- `DEPARTMENT`, `DIVISION`
+- `CASE TYPE`
+- `CATEGORY` — normalized case grouping
+- `LATITUDE`, `LONGITUDE`
+
+Dates are timezone-naive and parsed for immediate analysis.
+
+---
+
+## Common Examples
+
+### Monthly complaint volume
+
+```python
+df["CREATED DATE"] = pd.to_datetime(df["CREATED DATE"])
+monthly = (
+    df.groupby(df["CREATED DATE"].dt.to_period("M"))
+      .size()
+      .reset_index(name="count")
+)
+
+```
+
+### Average resolution time by category
+
+```python
+df.groupby("CATEGORY")["RESOLUTION_TIME_DAYS"].mean().sort_values()
+
+```
+
+### Map-ready data
+
+Latitude and longitude are already filtered to Houston boundaries.
+
+---
+
+## Notes
+
+- The dataset is exported **after** database deduplication and upserts
+- Data reflects a rolling multi-year window
+- Missing values are preserved as nulls (not empty strings)
+
+---
+
 ## Running the App
 ```bash
 python app/app.py

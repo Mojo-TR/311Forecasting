@@ -223,6 +223,13 @@ def upsert(df, table_name, engine):
             )
             
             conn.execute(upsert_stmt)
+            
+def export_table_to_csv(table_name, engine, output_path):
+    print(f"Exporting {table_name} → {output_path}")
+    query = f'SELECT * FROM "{table_name}"'
+    df = pd.read_sql(query, engine)
+    df.to_csv(output_path, index=False)
+    print("✓ CSV export complete")
 
 # MAIN REFRESH
 def refresh_year(url, table_name):
@@ -247,6 +254,13 @@ def refresh_year(url, table_name):
     delete_old_rows(table_name, engine)
 
     upsert(df, table_name, engine)
+    
+    export_table_to_csv(
+        table_name="houston_311",
+        engine=engine,
+        output_path="data/clean/Houston_311_Export.csv"
+    )
+    
     print(f"Completed refresh for {table_name}")
 
 if __name__ == "__main__":
