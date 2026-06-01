@@ -142,7 +142,7 @@ layout = dbc.Container([
                     dbc.Spinner(
                         html.Div(
                             id="forecast-table-container",
-                            style={"maxHeight": "500px", "overflowY": "auto"}  # optional scroll
+                            style={"maxHeight": "500px", "overflowY": "auto"}
                         ),
                         color="primary",
                         type="grow",
